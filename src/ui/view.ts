@@ -21,6 +21,7 @@ export class ClaudeCodeView extends ItemView {
     private runButton: HTMLButtonElement;
     private cancelButton: HTMLButtonElement;
     private outputArea: HTMLDivElement;
+    private outputSection: HTMLDivElement;
     private resultArea: HTMLDivElement;
     private currentResultStreamingElement: HTMLElement | null = null;
     private hitFinalContentMarker: boolean = false;
@@ -119,7 +120,7 @@ export class ClaudeCodeView extends ItemView {
         this.buildUI(container);
 
         // Initialize output renderer now that outputArea exists
-        this.outputRenderer = new OutputRenderer(this.outputArea, this, this.currentNotePath);
+        this.outputRenderer = new OutputRenderer(this.outputArea, this, this.currentNotePath, this.outputSection);
 
         // Load context for current note
         if (this.currentNotePath) {
@@ -216,7 +217,9 @@ export class ClaudeCodeView extends ItemView {
         }
 
         // Output section (fourth)
-        this.outputArea = UIBuilder.buildOutputSection(container);
+        const outputSectionResult = UIBuilder.buildOutputSection(container);
+        this.outputArea = outputSectionResult.outputArea;
+        this.outputSection = outputSectionResult.outputSection;
 
         // History section (fifth)
         this.historyList = UIBuilder.buildHistorySection(
@@ -1169,8 +1172,8 @@ export class ClaudeCodeView extends ItemView {
         this.hideResult();
 
         // Show status with elapsed time tracking
-        this.showStatus('🔓 Running with permissionless mode... 0.0s');
-        this.startElapsedTimeTracking('🔓 Running with permissionless mode');
+        this.showStatus('🔓 Running authorized tasks ... 0.0s');
+        this.startElapsedTimeTracking('🔓 Running authorized tasks');
 
         // Capture the note path for this specific run
         const runNotePath = file.path;

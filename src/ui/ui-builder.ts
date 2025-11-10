@@ -258,7 +258,7 @@ export class UIBuilder {
 
         permissionApprovalSection.createEl('div', {
             cls: 'permission-approval-message',
-            text: 'Claude is requesting permission to execute actions. Do you want to grant temporary permissionless access?'
+            text: 'Claude is requesting permission to execute actions.'
         });
 
         const approvalButtons = permissionApprovalSection.createEl('div', {
@@ -334,7 +334,7 @@ export class UIBuilder {
     /**
      * Build the output section
      */
-    static buildOutputSection(container: HTMLElement): HTMLDivElement {
+    static buildOutputSection(container: HTMLElement): { outputArea: HTMLDivElement; outputSection: HTMLDivElement } {
         const outputSection = container.createEl('div', { cls: 'claude-code-output-section' });
         const outputHeader = outputSection.createEl('div', { cls: 'claude-code-output-header collapsible-header' });
 
@@ -362,7 +362,10 @@ export class UIBuilder {
             }
         });
 
-        return outputArea;
+        // Initially hide the output section
+        outputSection.style.display = 'none';
+
+        return { outputArea, outputSection };
     }
 
     /**

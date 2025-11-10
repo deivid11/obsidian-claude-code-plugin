@@ -8,15 +8,17 @@ import { AgentActivityParser } from './parsers/agent-activity-parser';
 
 export class OutputRenderer {
     private outputArea: HTMLDivElement;
+    private outputSection: HTMLDivElement | null = null;
     private component: Component;
     private notePath: string;
     private currentStreamingElement: HTMLDivElement | null = null;
 
-    constructor(outputArea: HTMLDivElement, component: Component, notePath: string) {
+    constructor(outputArea: HTMLDivElement, component: Component, notePath: string, outputSection?: HTMLDivElement) {
         this.outputArea = outputArea;
         this.component = component;
         this.notePath = notePath;
         this.currentStreamingElement = null;
+        this.outputSection = outputSection || null;
     }
 
     /**
@@ -30,6 +32,9 @@ export class OutputRenderer {
      * Append a line of output
      */
     appendLine(text: string, isMarkdown: boolean = false): void {
+        // Show the output section when there's content
+        this.showOutputSection();
+
         const line = this.outputArea.createEl('div', { cls: 'claude-code-output-line' });
 
         if (isMarkdown) {
@@ -52,6 +57,9 @@ export class OutputRenderer {
      * Append streaming text (accumulates in the same element)
      */
     appendStreamingText(text: string): void {
+        // Show the output section when there's content
+        this.showOutputSection();
+
         // Create new streaming element if needed
         if (!this.currentStreamingElement) {
             this.currentStreamingElement = this.outputArea.createEl('div', {
@@ -81,6 +89,26 @@ export class OutputRenderer {
      */
     clear(): void {
         this.outputArea.empty();
+        // Hide the output section when cleared
+        this.hideOutputSection();
+    }
+
+    /**
+     * Show the output section
+     */
+    private showOutputSection(): void {
+        if (this.outputSection) {
+            this.outputSection.style.display = 'block';
+        }
+    }
+
+    /**
+     * Hide the output section
+     */
+    private hideOutputSection(): void {
+        if (this.outputSection) {
+            this.outputSection.style.display = 'none';
+        }
     }
 
     /**
