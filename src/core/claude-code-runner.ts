@@ -17,6 +17,7 @@ export interface ClaudeCodeRequest {
     vaultPath?: string;
     bypassPermissions?: boolean;
     runtimeModelOverride?: string;
+    conversationalMode?: boolean;  // When true, no file modifications are allowed
 }
 
 export interface ClaudeCodeResponse {

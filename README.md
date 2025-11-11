@@ -217,6 +217,50 @@ Prompt: "Improve the clarity of this explanation and add code examples"
 - **Solution**: Ensure Claude Code CLI has proper permissions
 - On Linux/Mac: `chmod +x /path/to/claude`
 
+### Flatpak/Snap Installation Issues
+
+If you installed Obsidian via Flatpak or Snap, you may encounter errors like:
+- `env: 'node': No such file or directory`
+- `Claude Code failed with code 127`
+
+This happens because Flatpak/Snap sandboxing blocks access to system binaries.
+
+**Solution: Grant Filesystem Permissions**
+
+#### For Flatpak:
+
+```bash
+# Allow access to the entire filesystem (recommended)
+flatpak override --user md.obsidian.Obsidian --filesystem=host
+
+# Or grant specific access to node and claude locations
+flatpak override --user md.obsidian.Obsidian --filesystem=/usr/bin
+flatpak override --user md.obsidian.Obsidian --filesystem=/bin
+flatpak override --user md.obsidian.Obsidian --filesystem=~/.nvm
+flatpak override --user md.obsidian.Obsidian --filesystem=~/.bun
+```
+
+#### Using Flatseal (GUI):
+
+1. Install Flatseal: `flatpak install flathub com.github.tchx84.Flatseal`
+2. Open Flatseal and find "Obsidian"
+3. Under "Filesystem" section, enable:
+   - **All system files** (easiest), or
+   - Add custom paths: `/usr/bin`, `/bin`, `~/.nvm`, `~/.bun`
+4. Restart Obsidian
+
+#### For Snap:
+
+```bash
+# Grant access to home directory
+snap connect obsidian:home
+
+# May need to install Obsidian from a different source
+# as Snap has stricter sandboxing
+```
+
+**Alternative**: Install Obsidian via other methods (AppImage, .deb, .rpm) to avoid sandboxing issues entirely.
+
 ### Results not appearing
 - **Check**: Is the Result section collapsed? Click the header to expand
 - **Check**: Console for errors (Ctrl/Cmd + Shift + I)

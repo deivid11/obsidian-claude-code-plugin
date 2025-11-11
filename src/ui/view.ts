@@ -25,6 +25,9 @@ export class ClaudeCodeView extends ItemView {
     private resultArea: HTMLDivElement;
     private currentResultStreamingElement: HTMLElement | null = null;
     private hitFinalContentMarker: boolean = false;
+    private userHasScrolled: boolean = false;
+    private lastScrollHeight: number = 0;
+    private lastRenderedText: string = ''; // Track what we've already rendered
     private previewArea: HTMLDivElement;
     private previewContentContainer: HTMLDivElement;
     private previewTabsContainer: HTMLDivElement;
@@ -32,6 +35,7 @@ export class ClaudeCodeView extends ItemView {
     private rejectButton: HTMLButtonElement;
     private selectedTextOnlyCheckbox: HTMLInputElement;
     private autoAcceptCheckbox: HTMLInputElement;
+    private conversationalModeCheckbox: HTMLInputElement;
     private modelSelect: HTMLSelectElement;
     private currentNoteLabel: HTMLElement;
     private statusIndicator: HTMLElement;
@@ -146,9 +150,21 @@ export class ClaudeCodeView extends ItemView {
         this.promptInput = inputElements.promptInput;
         this.selectedTextOnlyCheckbox = inputElements.selectedTextOnlyCheckbox;
         this.autoAcceptCheckbox = inputElements.autoAcceptCheckbox;
+        this.conversationalModeCheckbox = inputElements.conversationalModeCheckbox;
         this.modelSelect = inputElements.modelSelect;
         this.runButton = inputElements.runButton;
         this.cancelButton = inputElements.cancelButton;
+
+        // When conversational mode is toggled, disable file-related options
+        this.conversationalModeCheckbox.addEventListener('change', () => {
+            const isConversational = this.conversationalModeCheckbox.checked;
+            this.selectedTextOnlyCheckbox.disabled = isConversational;
+            this.autoAcceptCheckbox.disabled = isConversational;
+            if (isConversational) {
+                this.selectedTextOnlyCheckbox.checked = false;
+                this.autoAcceptCheckbox.checked = false;
+            }
+        });
         // Note: statusIndicator and statusText are now part of Result section (see below)
 
         // Save model selection when changed
@@ -184,6 +200,9 @@ export class ClaudeCodeView extends ItemView {
         this.resultArea = resultElements.resultArea;
         this.statusIndicator = resultElements.statusArea;
         this.statusText = resultElements.statusText;
+
+        // Setup smart auto-scroll detection
+        this.setupSmartAutoScroll();
 
         // Permission approval section (after result)
         const permissionElements = UIBuilder.buildPermissionApprovalSection(
@@ -330,6 +349,9 @@ export class ClaudeCodeView extends ItemView {
 
         this.isProcessing = true;
 
+        // Reset scroll state for new request
+        this.resetScrollState();
+
         try {
             // Clear the prompt input
             this.promptInput.value = '';
@@ -386,7 +408,8 @@ export class ClaudeCodeView extends ItemView {
             notePath: file.path,
             selectedText: useSelectedTextOnly ? selectedText : undefined,
             vaultPath: vaultPath,
-            runtimeModelOverride: this.modelSelect.value || undefined
+            runtimeModelOverride: this.modelSelect.value || undefined,
+            conversationalMode: this.conversationalModeCheckbox.checked
             };
 
             // Update UI
@@ -886,11 +909,15 @@ export class ClaudeCodeView extends ItemView {
             this.currentResultStreamingElement = this.resultArea.createEl('div', {
                 cls: 'claude-code-result-streaming markdown-rendered'
             });
+            // Store accumulated text separately for markdown rendering
+            (this.currentResultStreamingElement as any).accumulatedText = '';
         }
 
+        // Get accumulated text
+        let accumulatedText = (this.currentResultStreamingElement as any).accumulatedText || '';
+
         // Check if we've already encountered FINAL-CONTENT marker in the existing text
-        const currentText = this.currentResultStreamingElement.textContent || '';
-        if (currentText.includes('---FINAL-CONTENT---')) {
+        if (accumulatedText.includes('---FINAL-CONTENT---')) {
             console.log('[Append To Result] Found FINAL-CONTENT in existing text, cleaning up and setting flag');
             this.cleanupFinalContentFromStream();
             this.hitFinalContentMarker = true;
@@ -898,38 +925,154 @@ export class ClaudeCodeView extends ItemView {
         }
 
         // Check if this chunk would introduce the FINAL-CONTENT marker
-        const combinedText = currentText + text;
+        const combinedText = accumulatedText + text;
         if (combinedText.includes('---FINAL-CONTENT---')) {
             // Find how much of this chunk we can add before the marker
             const finalContentIndex = combinedText.indexOf('---FINAL-CONTENT---');
-            const textBeforeMarker = combinedText.substring(currentText.length, finalContentIndex);
+            const textBeforeMarker = combinedText.substring(0, finalContentIndex);
 
-            if (textBeforeMarker.length > 0) {
-                // Add only the text before the marker
-                console.log('[Append To Result] Chunk contains FINAL-CONTENT, adding only text before marker');
-                this.currentResultStreamingElement.createEl('span', {
-                    cls: 'streaming-text-chunk',
-                    text: textBeforeMarker
-                });
-            }
+            // Update accumulated text and render
+            (this.currentResultStreamingElement as any).accumulatedText = textBeforeMarker;
+            this.renderStreamingMarkdown(textBeforeMarker);
 
-            console.log('[Append To Result] Hit FINAL-CONTENT marker, cleaning up and setting flag');
-            this.cleanupFinalContentFromStream();
+            console.log('[Append To Result] Hit FINAL-CONTENT marker, setting flag');
             this.hitFinalContentMarker = true;
             return;
         }
 
-        // Normal case: add the full chunk
-        const textSpan = this.currentResultStreamingElement.createEl('span', {
-            cls: 'streaming-text-chunk',
-            text: text
-        });
+        // Normal case: add the full chunk and re-render markdown
+        (this.currentResultStreamingElement as any).accumulatedText = combinedText;
+        this.renderStreamingMarkdown(combinedText);
 
-        console.log('[Append To Result] Appended chunk, total children:', this.currentResultStreamingElement.children.length);
+        console.log('[Append To Result] Appended chunk, accumulated length:', combinedText.length);
 
-        // Auto-scroll to bottom
-        this.resultArea.scrollTop = this.resultArea.scrollHeight;
+        // Smart auto-scroll (respects user scroll position)
+        this.autoScrollResult();
     }
+
+    /**
+     * Render accumulated markdown text by detecting and rendering complete blocks
+     * Appends complete paragraphs/blocks as independent chunks
+     */
+    private renderStreamingMarkdown(text: string): void {
+        if (!this.currentResultStreamingElement) return;
+
+        // Get the new content
+        const newContent = text.substring(this.lastRenderedText.length);
+        if (!newContent) return;
+
+        // Extract what we can render now
+        const { completeBlocks, remainingText } = this.extractCompleteBlocks(newContent);
+
+        if (completeBlocks.length > 0) {
+            // Remove any incomplete plain text from last render
+            this.removeIncompletePlainText();
+
+            // Render each complete block as a separate chunk
+            for (const block of completeBlocks) {
+                this.appendMarkdownBlock(block);
+            }
+
+            // Update what we've rendered
+            const renderedLength = completeBlocks.join('\n\n').length;
+            this.lastRenderedText = this.lastRenderedText + newContent.substring(0, newContent.length - remainingText.length);
+        }
+
+        // Append any remaining incomplete text as plain text
+        if (remainingText) {
+            this.appendPlainText(remainingText);
+        }
+    }
+
+    /**
+     * Extract complete markdown blocks from the new content
+     * Returns blocks that are ready to be rendered and remaining incomplete text
+     */
+    private extractCompleteBlocks(newContent: string): { completeBlocks: string[], remainingText: string } {
+        const blocks: string[] = [];
+
+        // Split by paragraph breaks (double newline)
+        const paragraphs = newContent.split(/\n\n+/);
+
+        // If we have more than one paragraph, all but the last are complete
+        if (paragraphs.length > 1) {
+            for (let i = 0; i < paragraphs.length - 1; i++) {
+                if (paragraphs[i].trim()) {
+                    blocks.push(paragraphs[i]);
+                }
+            }
+            return {
+                completeBlocks: blocks,
+                remainingText: paragraphs[paragraphs.length - 1]
+            };
+        }
+
+        // No complete blocks yet, everything is remaining
+        return {
+            completeBlocks: [],
+            remainingText: newContent
+        };
+    }
+
+    /**
+     * Remove incomplete plain text from the last render
+     * (will be re-added as part of complete block or new plain text)
+     */
+    private removeIncompletePlainText(): void {
+        if (!this.currentResultStreamingElement) return;
+
+        const lastChild = this.currentResultStreamingElement.lastChild;
+        // Only remove if it's a plain text node (not a markdown-block)
+        if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
+            this.currentResultStreamingElement.removeChild(lastChild);
+        }
+    }
+
+    /**
+     * Append a complete markdown block as an independent rendered chunk
+     */
+    private appendMarkdownBlock(blockText: string): void {
+        if (!this.currentResultStreamingElement) return;
+
+        // Create a container for this block
+        const blockContainer = document.createElement('div');
+        blockContainer.addClass('markdown-block');
+
+        const { MarkdownRenderer } = require('obsidian');
+        try {
+            MarkdownRenderer.renderMarkdown(
+                blockText,
+                blockContainer,
+                this.currentNotePath,
+                this
+            );
+        } catch (e) {
+            console.error('[Append Markdown Block] Error:', e);
+            blockContainer.textContent = blockText;
+        }
+
+        // Append the block
+        this.currentResultStreamingElement.appendChild(blockContainer);
+    }
+
+    /**
+     * Append plain text without any processing
+     */
+    private appendPlainText(text: string): void {
+        if (!this.currentResultStreamingElement) return;
+
+        // Check if we already have a plain text container
+        const lastChild = this.currentResultStreamingElement.lastChild;
+        if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
+            // Append to existing text node
+            lastChild.textContent += text;
+        } else {
+            // Create new text node
+            const textNode = document.createTextNode(text);
+            this.currentResultStreamingElement.appendChild(textNode);
+        }
+    }
+
 
     /**
      * Clean up FINAL-CONTENT marker and everything after it from the streaming element
@@ -1007,42 +1150,54 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
+     * Setup smart auto-scroll detection on result area
+     */
+    private setupSmartAutoScroll(): void {
+        // Track when user manually scrolls
+        this.resultArea.addEventListener('scroll', () => {
+            const { scrollTop, scrollHeight, clientHeight } = this.resultArea;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 50; // Within 50px of bottom
+
+            // If user scrolled up (away from bottom), mark as manually scrolled
+            if (!isNearBottom) {
+                this.userHasScrolled = true;
+            } else {
+                // If user scrolled back to bottom, resume auto-scroll
+                this.userHasScrolled = false;
+            }
+        });
+    }
+
+    /**
+     * Auto-scroll result area to bottom (only if user hasn't manually scrolled up)
+     */
+    private autoScrollResult(): void {
+        if (!this.userHasScrolled) {
+            this.resultArea.scrollTop = this.resultArea.scrollHeight;
+        }
+    }
+
+    /**
+     * Reset scroll state (call when starting new request)
+     */
+    private resetScrollState(): void {
+        this.userHasScrolled = false;
+        this.lastScrollHeight = 0;
+        this.lastRenderedText = ''; // Reset incremental rendering state
+    }
+
+    /**
      * Finish the streaming result block
      */
     private finishResultStreaming(): void {
         if (this.currentResultStreamingElement) {
-            // Render the accumulated text as markdown
-            let fullText = this.currentResultStreamingElement.textContent || '';
-            console.log('[Finish Result Streaming] Full text length:', fullText.length);
-            console.log('[Finish Result Streaming] First 100 chars:', fullText.substring(0, 100));
-            console.log('[Finish Result Streaming] Last 100 chars:', fullText.substring(fullText.length - 100));
+            console.log('[Finish Result Streaming] Cleaning up streaming state');
 
-            // Remove everything after and including ---FINAL-CONTENT---
-            const finalContentIndex = fullText.indexOf('---FINAL-CONTENT---');
-            console.log('[Finish Result Streaming] FINAL-CONTENT index:', finalContentIndex);
-            if (finalContentIndex !== -1) {
-                fullText = fullText.substring(0, finalContentIndex).trim();
-                console.log('[Finish Result Streaming] After filtering, length:', fullText.length);
-            }
-
-            // Clear the streaming element and re-render as markdown
-            this.currentResultStreamingElement.empty();
+            // Just update the CSS class - content is already rendered as markdown
             this.currentResultStreamingElement.removeClass('claude-code-result-streaming');
             this.currentResultStreamingElement.addClass('markdown-rendered');
 
-            const { MarkdownRenderer } = require('obsidian');
-            try {
-                MarkdownRenderer.renderMarkdown(
-                    fullText,
-                    this.currentResultStreamingElement,
-                    this.currentNotePath,
-                    this
-                );
-            } catch (e) {
-                console.error('[Result Markdown Render Error]', e);
-                this.currentResultStreamingElement.textContent = fullText;
-            }
-
+            // Clear the streaming element reference
             this.currentResultStreamingElement = null;
         }
     }

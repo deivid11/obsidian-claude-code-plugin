@@ -15,6 +15,7 @@ export interface UIElements {
     rejectButton: HTMLButtonElement;
     selectedTextOnlyCheckbox: HTMLInputElement;
     autoAcceptCheckbox: HTMLInputElement;
+    conversationalModeCheckbox: HTMLInputElement;
     statusIndicator: HTMLDivElement;
     statusText: HTMLSpanElement;
     interactivePromptSection: HTMLDivElement;
@@ -50,6 +51,7 @@ export class UIBuilder {
         promptInput: HTMLTextAreaElement;
         selectedTextOnlyCheckbox: HTMLInputElement;
         autoAcceptCheckbox: HTMLInputElement;
+        conversationalModeCheckbox: HTMLInputElement;
         modelSelect: HTMLSelectElement;
         runButton: HTMLButtonElement;
         cancelButton: HTMLButtonElement;
@@ -68,6 +70,12 @@ export class UIBuilder {
 
         // Options
         const optionsDiv = inputSection.createEl('div', { cls: 'claude-code-options' });
+
+        // Conversational mode checkbox
+        const conversationalLabel = optionsDiv.createEl('label', { cls: 'claude-code-checkbox-label' });
+        const conversationalModeCheckbox = conversationalLabel.createEl('input', { type: 'checkbox' });
+        conversationalLabel.appendText(' 💬 Conversational mode (no file edits)');
+        conversationalLabel.title = 'Chat with Claude without modifying any files';
 
         // Selected text only checkbox
         const selectedTextLabel = optionsDiv.createEl('label', { cls: 'claude-code-checkbox-label' });
@@ -112,6 +120,7 @@ export class UIBuilder {
             promptInput,
             selectedTextOnlyCheckbox,
             autoAcceptCheckbox,
+            conversationalModeCheckbox,
             modelSelect,
             runButton,
             cancelButton

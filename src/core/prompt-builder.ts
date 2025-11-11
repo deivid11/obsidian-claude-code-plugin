@@ -29,6 +29,14 @@ export class PromptBuilder {
             prompt += customSystemPrompt + '\n\n';
         }
 
+        // Check if conversational mode
+        if (request.conversationalMode) {
+            prompt += this.buildConversationalModeInstructions();
+            prompt += `Current note content (for reference only - DO NOT MODIFY):\n---\n${request.noteContent}\n---\n\n`;
+            prompt += `USER QUESTION: ${request.userPrompt}\n\n`;
+            return prompt;
+        }
+
         // Add permission mode instructions at the top
         prompt += this.buildPermissionModeInstructions(bypassPermissions);
 
@@ -47,6 +55,20 @@ export class PromptBuilder {
         prompt += this.buildOutputFormatInstructions();
 
         return prompt;
+    }
+
+    /**
+     * Build conversational mode instructions
+     */
+    private static buildConversationalModeInstructions(): string {
+        return `💬 CONVERSATIONAL MODE\n` +
+            `You are in conversational mode. This means:\n` +
+            `- DO NOT use file editing tools (Write, Edit, NotebookEdit)\n` +
+            `- DO NOT modify any files\n` +
+            `- You can use Read, Grep, Bash, WebSearch, and other read-only tools\n` +
+            `- Focus on answering the user's question or providing information\n` +
+            `- The note content is provided for context only\n` +
+            `- Respond directly in your message - no file modifications needed\n\n`;
     }
 
     /**

@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import ClaudeCodePlugin from '../main';
 import { execSync } from 'child_process';
+import * as os from 'os';
 
 export interface ClaudeCodeSettings {
     claudeCodePath: string;
@@ -194,31 +195,50 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
     }
 
     /**
-     * Attempt to detect Claude Code installation path
+     * Attempt to detect Claude Code installation path (cross-platform)
      */
     private detectClaudeCodePath(): string | null {
-        const possiblePaths = [
-            'claude', // If in PATH
-            '/usr/local/bin/claude',
-            '/usr/bin/claude',
-            `${process.env.HOME}/.local/bin/claude`,
-            `${process.env.HOME}/bin/claude`,
-            `${process.env.HOME}/.bun/bin/claude`,
-        ];
+        const isWindows = process.platform === 'win32';
+        const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+        const fs = require('fs');
+        const path = require('path');
 
-        for (const path of possiblePaths) {
+        let possiblePaths: string[] = [];
+
+        if (isWindows) {
+            // Windows-specific paths
+            possiblePaths = [
+                'claude', // If in PATH
+                path.join(homeDir, 'AppData', 'Local', 'Programs', 'claude', 'claude.exe'),
+                path.join(homeDir, '.bun', 'bin', 'claude.exe'),
+                'C:\\Program Files\\claude\\claude.exe',
+            ];
+        } else {
+            // Unix-like systems
+            possiblePaths = [
+                'claude', // If in PATH
+                '/usr/local/bin/claude',
+                '/usr/bin/claude',
+                path.join(homeDir, '.local', 'bin', 'claude'),
+                path.join(homeDir, 'bin', 'claude'),
+                path.join(homeDir, '.bun', 'bin', 'claude'),
+            ];
+        }
+
+        for (const cmdPath of possiblePaths) {
             try {
-                // Try to execute 'which' command for simple path names
-                if (!path.includes('/')) {
-                    const result = execSync(`which ${path}`, { encoding: 'utf8' }).trim();
+                // Try to execute 'which' or 'where' command for simple path names
+                if (!cmdPath.includes('/') && !cmdPath.includes('\\')) {
+                    const whichCmd = isWindows ? 'where' : 'which';
+                    const result = execSync(`${whichCmd} ${cmdPath}`, { encoding: 'utf8' }).trim();
                     if (result) {
-                        return result;
+                        // On Windows, 'where' can return multiple paths, take the first
+                        return result.split('\n')[0].trim();
                     }
                 } else {
                     // Check if file exists for absolute paths
-                    const fs = require('fs');
-                    if (fs.existsSync(path)) {
-                        return path;
+                    if (fs.existsSync(cmdPath)) {
+                        return cmdPath;
                     }
                 }
             } catch (e) {
@@ -230,28 +250,52 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
     }
 
     /**
-     * Test if Claude Code is accessible and working
+     * Test if Claude Code is accessible and working (cross-platform)
      */
     private async testClaudeCode(): Promise<{ success: boolean; error?: string }> {
         try {
-            const path = this.plugin.settings.claudeCodePath || 'claude';
+            const cmdPath = this.plugin.settings.claudeCodePath || 'claude';
             const { exec } = require('child_process');
             const fs = require('fs');
+            const path = require('path');
 
-            // Build enhanced PATH
+            const isWindows = process.platform === 'win32';
+            const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+            const pathSeparator = isWindows ? ';' : ':';
+
+            // Build enhanced PATH - include common tool locations (cross-platform)
             const envPath = process.env.PATH || '';
-            const pathsToAdd = [
-                `${process.env.HOME}/.nvm/versions/node/v20.18.2/bin`,
-                `${process.env.HOME}/.bun/bin`,
-                '/usr/local/bin',
-                '/usr/bin',
-                '/bin'
-            ].filter(p => fs.existsSync(p));
+            let pathsToAdd: string[] = [];
 
-            const enhancedPath = [...new Set([...pathsToAdd, ...envPath.split(':')])].join(':');
+            if (isWindows) {
+                pathsToAdd = [
+                    path.join(homeDir, 'AppData', 'Local', 'Programs', 'nodejs'),
+                    path.join(homeDir, '.bun', 'bin'),
+                    'C:\\Program Files\\nodejs',
+                    'C:\\Program Files (x86)\\nodejs',
+                ];
+            } else {
+                pathsToAdd = [
+                    path.join(homeDir, '.nvm', 'versions', 'node', 'v20.18.2', 'bin'),
+                    path.join(homeDir, '.bun', 'bin'),
+                    '/usr/local/bin',
+                    '/usr/bin',
+                    '/bin',
+                ];
+            }
+
+            const existingPaths = pathsToAdd.filter(p => {
+                try {
+                    return fs.existsSync(p);
+                } catch {
+                    return false;
+                }
+            });
+
+            const enhancedPath = [...new Set([...existingPaths, ...envPath.split(pathSeparator)])].join(pathSeparator);
 
             return new Promise((resolve) => {
-                exec(`${path} --version`, {
+                exec(`${cmdPath} --version`, {
                     timeout: 5000,
                     env: {
                         ...process.env,
