@@ -135,12 +135,20 @@ export class ClaudeCodeRunner {
             this.sendOutput(`Starting Claude Code...\n`);
             this.sendOutput(`Session directory: ${sessionInfo.sessionDir}\n`);
 
+            // Debug environment before spawning
+            this.sendOutput(`[DEBUG] Checking environment...\n`);
+            this.sendOutput(`[DEBUG] SHELL: ${process.env.SHELL}\n`);
+            this.sendOutput(`[DEBUG] HOME: ${process.env.HOME}\n`);
+            this.sendOutput(`[DEBUG] Claude path: ${claudePath}\n`);
+
             try {
                 this.currentProcess = ProcessSpawner.spawn({
                     claudePath,
                     args,
-                    workingDir
+                    workingDir,
+                    onDebugOutput: (msg) => this.sendOutput(msg)
                 });
+                this.sendOutput(`[DEBUG] Process spawned successfully, PID: ${this.currentProcess.pid}\n`);
             } catch (spawnError) {
                 this.sendOutput(`\n❌ Failed to spawn process: ${spawnError}`);
                 throw spawnError;

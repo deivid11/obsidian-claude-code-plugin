@@ -1,7 +1,6 @@
 import { spawn, ChildProcess, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 
 /**
  * Configuration for spawning Claude Code process
@@ -10,6 +9,7 @@ export interface SpawnConfig {
     claudePath: string;
     args: string[];
     workingDir: string;
+    onDebugOutput?: (message: string) => void;
 }
 
 /**
@@ -17,93 +17,181 @@ export interface SpawnConfig {
  */
 export class ProcessSpawner {
     /**
-     * Build enhanced PATH including node directory (found via which/where)
-     * The shebang (#!/usr/bin/env node) needs to find node in PATH
+     * Get environment variables as if running in a login shell
+     * This loads variables from .zshrc, .bash_profile, etc.
      */
-    private static buildEnhancedPath(): string {
-        const isWindows = process.platform === 'win32';
-        const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-        const envPath = process.env.PATH || '';
-        const pathSeparator = isWindows ? ';' : ':';
-
-        const commonPaths: string[] = [];
-
-        // Try to find node using which/where and add its directory to PATH
+    private static getShellEnvironment(onDebugOutput?: (message: string) => void): Record<string, string> {
         try {
-            const whichCmd = isWindows ? 'where node' : 'which node';
-            const nodePath = execSync(whichCmd, { encoding: 'utf8' }).trim().split('\n')[0];
-            if (nodePath) {
-                const nodeDir = path.dirname(nodePath);
-                console.log(`[ProcessSpawner] Found node via which: ${nodePath}, adding dir: ${nodeDir}`);
-                commonPaths.push(nodeDir);
-            }
-        } catch (e) {
-            console.log('[ProcessSpawner] which/where node failed, adding common node paths');
-        }
+            // Determine which shell to use
+            const shell = process.env.SHELL || '/bin/zsh';
 
-        // Add common node locations explicitly (in case which fails in Flatpak)
-        if (!isWindows) {
-            // NVM paths - find all installed versions dynamically, sorted by version (newest first)
-            try {
-                const nvmDir = path.join(homeDir, '.nvm', 'versions', 'node');
-                if (fs.existsSync(nvmDir)) {
-                    const versions = fs.readdirSync(nvmDir)
-                        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true })); // Sort descending (v20 before v14)
-                    console.log(`[ProcessSpawner] Found NVM versions:`, versions);
-                    for (const version of versions) {
-                        commonPaths.push(path.join(nvmDir, version, 'bin'));
-                    }
+            if (onDebugOutput) {
+                onDebugOutput(`[DEBUG] Loading environment from shell: ${shell}\n`);
+
+                // Show which config files will be sourced
+                if (shell.includes('zsh')) {
+                    onDebugOutput(`[DEBUG] Will explicitly source: ~/.zprofile and ~/.zshrc\n`);
+                } else if (shell.includes('bash')) {
+                    onDebugOutput(`[DEBUG] Will explicitly source: ~/.bash_profile and ~/.bashrc\n`);
                 }
-            } catch (e) {
-                console.log('[ProcessSpawner] NVM directory not accessible');
             }
 
-            // System paths (might be newer than NVM on some systems)
-            commonPaths.push('/bin', '/usr/bin', '/usr/local/bin');
-        }
+            // Run the shell and explicitly source all config files
+            // We need to explicitly source the files because -l -i might not work in non-interactive contexts
+            const startTime = Date.now();
 
-        // Add common locations where claude might be installed
-        if (isWindows) {
-            commonPaths.push(
-                path.join(homeDir, '.bun', 'bin'),
-                path.join(homeDir, '.local', 'bin')
-            );
-        } else {
-            commonPaths.push(
-                path.join(homeDir, '.bun', 'bin'),
-                path.join(homeDir, '.local', 'bin')
-            );
-        }
+            // Determine which config files to source based on the shell
+            let sourceCommand: string;
+            if (shell.includes('zsh')) {
+                // For zsh: source both profile and rc files
+                sourceCommand = `${shell} -c 'source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; env'`;
+            } else if (shell.includes('bash')) {
+                // For bash: source both profile and rc files
+                sourceCommand = `${shell} -c 'source ~/.bash_profile 2>/dev/null; source ~/.bashrc 2>/dev/null; env'`;
+            } else {
+                // Fallback to login + interactive flags
+                sourceCommand = `${shell} -l -i -c 'env'`;
+            }
 
-        // Combine with existing PATH and deduplicate
-        const enhancedPath = [...new Set([...commonPaths, ...envPath.split(pathSeparator)])].join(pathSeparator);
-        console.log('[ProcessSpawner] Enhanced PATH:', enhancedPath.split(pathSeparator).slice(0, 10).join(', '), '...');
-        return enhancedPath;
+            const envOutput = execSync(sourceCommand, {
+                encoding: 'utf8',
+                maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large environments
+                timeout: 5000 // 5 second timeout
+            });
+            const duration = Date.now() - startTime;
+
+            if (onDebugOutput) {
+                onDebugOutput(`[DEBUG] Shell environment loaded in ${duration}ms\n`);
+                onDebugOutput(`[DEBUG] Raw output length: ${envOutput.length} bytes\n`);
+            }
+
+            // Parse the environment output into a key-value object
+            const env: Record<string, string> = {};
+            const lines = envOutput.split('\n');
+
+            if (onDebugOutput) {
+                onDebugOutput(`[DEBUG] Parsing ${lines.length} lines of environment output\n`);
+            }
+
+            lines.forEach((line: string) => {
+                const idx = line.indexOf('=');
+                if (idx > 0) {
+                    const key = line.substring(0, idx);
+                    const value = line.substring(idx + 1);
+                    env[key] = value;
+                }
+            });
+
+            if (onDebugOutput) {
+                onDebugOutput(`[DEBUG] Parsed ${Object.keys(env).length} environment variables\n`);
+
+                // Show comparison with process.env
+                const processEnvKeys = Object.keys(process.env);
+                const shellEnvKeys = Object.keys(env);
+                const onlyInShell = shellEnvKeys.filter(k => !processEnvKeys.includes(k));
+                const onlyInProcess = processEnvKeys.filter(k => !shellEnvKeys.includes(k));
+
+                if (onlyInShell.length > 0) {
+                    onDebugOutput(`[DEBUG] Variables only in shell (${onlyInShell.length}): ${onlyInShell.slice(0, 10).join(', ')}${onlyInShell.length > 10 ? '...' : ''}\n`);
+                }
+                if (onlyInProcess.length > 0) {
+                    onDebugOutput(`[DEBUG] Variables only in process.env (${onlyInProcess.length}): ${onlyInProcess.slice(0, 10).join(', ')}${onlyInProcess.length > 10 ? '...' : ''}\n`);
+                }
+            }
+
+            return env;
+        } catch (error) {
+            // Fallback to process.env if shell environment loading fails
+            if (onDebugOutput) {
+                onDebugOutput(`[DEBUG] ⚠️ Failed to load shell environment: ${error}\n`);
+                onDebugOutput(`[DEBUG] Falling back to process.env\n`);
+            }
+            return { ...process.env } as Record<string, string>;
+        }
     }
 
     /**
      * Spawn Claude Code process with enhanced environment
      *
-     * Claude has a shebang (#!/usr/bin/env node) so the OS will find and run node automatically
-     * We use shell: true so the enhanced PATH is available when the shebang is evaluated
-     *
      * @param config Spawn configuration
      * @returns Child process
      */
     static spawn(config: SpawnConfig): ChildProcess {
-        const enhancedPath = this.buildEnhancedPath();
+        // Get full shell environment (includes all your terminal env vars)
+        const shellEnv = this.getShellEnvironment(config.onDebugOutput);
 
+        // Debug output: show loaded environment variables
+        if (config.onDebugOutput) {
+            config.onDebugOutput('[DEBUG] Shell environment variables loaded:\n');
+
+            // Sort env vars for easier reading
+            const sortedKeys = Object.keys(shellEnv).sort();
+
+            // Show important env vars first
+            const importantVars = ['PATH', 'HOME', 'SHELL', 'USER', 'ANTHROPIC_API_KEY', 'NODE_ENV'];
+            config.onDebugOutput('[DEBUG] Important variables:\n');
+            for (const key of importantVars) {
+                if (shellEnv[key]) {
+                    // Mask sensitive values like API keys
+                    let value = shellEnv[key];
+                    if (key.includes('KEY') || key.includes('TOKEN') || key.includes('SECRET')) {
+                        value = value ? `${value.substring(0, 8)}...` : '';
+                    }
+                    config.onDebugOutput(`[DEBUG]   ${key}=${value}\n`);
+                }
+            }
+
+            // Show all other variables
+            config.onDebugOutput('[DEBUG] All environment variables:\n');
+            for (const key of sortedKeys) {
+                if (!importantVars.includes(key)) {
+                    let value = shellEnv[key];
+                    // Mask sensitive values
+                    if (key.includes('KEY') || key.includes('TOKEN') || key.includes('SECRET') || key.includes('PASSWORD')) {
+                        value = value ? `${value.substring(0, 8)}...` : '';
+                    }
+                    config.onDebugOutput(`[DEBUG]   ${key}=${value}\n`);
+                }
+            }
+            config.onDebugOutput('\n');
+        }
+
+        // Resolve claudePath to absolute path
+        // If it starts with ~, expand to home directory
+        let resolvedClaudePath = config.claudePath;
+        if (resolvedClaudePath.startsWith('~')) {
+            resolvedClaudePath = resolvedClaudePath.replace('~', shellEnv.HOME || '');
+        }
+
+        // If it's not an absolute path, try to find it in PATH
+        if (!path.isAbsolute(resolvedClaudePath)) {
+            // Check if it's a command name (like "claude")
+            // Try to find it in PATH from shell environment
+            const pathDirs = (shellEnv.PATH || '').split(':').filter(dir => dir);
+
+            for (const dir of pathDirs) {
+                const fullPath = path.join(dir, resolvedClaudePath);
+                if (fs.existsSync(fullPath)) {
+                    resolvedClaudePath = fullPath;
+                    break;
+                }
+            }
+        }
+
+        if (config.onDebugOutput) {
+            config.onDebugOutput(`[DEBUG] Resolved claude path: ${resolvedClaudePath}\n`);
+            config.onDebugOutput(`[DEBUG] Command: ${resolvedClaudePath} ${config.args.join(' ')}\n`);
+        }
+
+        // Use the shell to execute the command, which handles shebangs and PATH resolution
+        // This is the same as running it from your terminal
         const options = {
             cwd: config.workingDir,
-            env: {
-                ...process.env,
-                PATH: enhancedPath
-            },
-            shell: true  // Required so the shell uses our enhanced PATH for the shebang
+            env: shellEnv,
+            shell: shellEnv.SHELL || '/bin/zsh'
         };
 
-        // Run claude directly - the shebang will handle finding node
-        return spawn(config.claudePath, config.args, options);
+        return spawn(resolvedClaudePath, config.args, options);
     }
 
     /**

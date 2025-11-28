@@ -1,6 +1,8 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import fs from "fs";
+import path from "path";
 
 const banner =
 `/*
@@ -10,6 +12,16 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
+
+// Ensure build directory exists
+if (!fs.existsSync("build")) {
+	fs.mkdirSync("build", { recursive: true });
+}
+
+// Copy manifest.json and styles.css to build folder
+fs.copyFileSync("manifest.json", "build/manifest.json");
+fs.copyFileSync("styles.css", "build/styles.css");
+console.log("Copied manifest.json and styles.css to build/");
 
 const context = await esbuild.context({
 	banner: {
@@ -37,7 +49,7 @@ const context = await esbuild.context({
 	logLevel: "info",
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
-	outfile: "main.js",
+	outfile: "build/main.js",
 });
 
 if (prod) {
