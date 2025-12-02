@@ -278,6 +278,37 @@ snap connect obsidian:home
 - **Permission Control**: Interactive mode lets you review all changes
 - **No Telemetry**: This plugin doesn't collect or send usage data
 
+## Platform Support
+
+The plugin automatically detects your operating system and configures the appropriate shell environment:
+
+| Platform | Shell | Profile Files Loaded |
+|----------|-------|---------------------|
+| **Windows** | `cmd.exe` (via `COMSPEC`) | Uses system environment directly |
+| **macOS** | User's shell (`$SHELL`) | zsh: `~/.zshenv`, `~/.zprofile`, `~/.zshrc` |
+| **Linux** | User's shell (`$SHELL`) | bash: `~/.profile`, `~/.bash_profile`, `~/.bashrc` |
+| **Fish shell** | `fish` | Loaded via `fish -l` |
+
+### Shell Environment Loading
+
+The plugin loads your shell environment to ensure Claude Code has access to:
+- Your `PATH` (to find the `claude` CLI)
+- Environment variables like `ANTHROPIC_API_KEY`
+- Any custom configurations from your shell profiles
+
+### Windows-Specific Notes
+
+- The plugin uses `cmd.exe` by default (via the `COMSPEC` environment variable)
+- PATH is correctly parsed using `;` as separator
+- Executable extensions (`.exe`, `.cmd`, `.bat`) are automatically checked
+- Home directory uses `USERPROFILE` when `HOME` is not set
+
+### macOS/Linux Notes
+
+- The default shell is detected from the `$SHELL` environment variable
+- Profile files are sourced to load environment variables
+- If your shell is not zsh or bash, the plugin falls back to login shell mode (`-l` flag)
+
 ## Development
 
 ### Building from Source

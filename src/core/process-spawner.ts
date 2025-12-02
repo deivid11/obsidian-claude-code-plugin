@@ -1,6 +1,7 @@
 import { spawn, ChildProcess, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 /**
  * Configuration for spawning Claude Code process
@@ -18,23 +19,65 @@ export interface SpawnConfig {
  */
 export class ProcessSpawner {
     /**
+     * Check if running on Windows
+     */
+    private static isWindows(): boolean {
+        return process.platform === 'win32';
+    }
+
+    /**
+     * Get the default shell for the current platform
+     */
+    private static getDefaultShell(): string {
+        if (this.isWindows()) {
+            // On Windows, prefer PowerShell if available, otherwise cmd.exe
+            // Check for pwsh (PowerShell Core) first, then powershell, then cmd
+            if (process.env.COMSPEC) {
+                return process.env.COMSPEC; // Usually C:\Windows\System32\cmd.exe
+            }
+            return 'cmd.exe';
+        }
+        // On Unix-like systems, use SHELL env var or default to /bin/sh
+        return process.env.SHELL || '/bin/sh';
+    }
+
+    /**
+     * Get the PATH separator for the current platform
+     */
+    private static getPathSeparator(): string {
+        return this.isWindows() ? ';' : ':';
+    }
+
+    /**
+     * Get the shell name from a shell path (e.g., "/bin/zsh" -> "zsh")
+     */
+    private static getShellName(shellPath: string): string {
+        return path.basename(shellPath);
+    }
+
+    /**
      * Get environment variables as if running in a login shell
-     * This loads variables from .zshrc, .bash_profile, etc.
+     * This loads variables from .zshrc, .bash_profile, etc. on Unix
+     * On Windows, it uses process.env directly as Windows doesn't have shell profiles
      */
     private static getShellEnvironment(onDebugOutput?: (message: string) => void): Record<string, string> {
+        // On Windows, just return process.env - Windows doesn't have shell profile files like Unix
+        if (this.isWindows()) {
+            if (onDebugOutput) {
+                onDebugOutput(`[DEBUG] Windows detected, using process.env directly\n`);
+            }
+            return { ...process.env } as Record<string, string>;
+        }
+
         try {
-            // Determine which shell to use
-            const shell = process.env.SHELL || '/bin/zsh';
+            // Determine which shell to use (Unix only)
+            const shell = process.env.SHELL || '/bin/sh';
+            const shellName = this.getShellName(shell);
+            const homeDir = os.homedir();
 
             if (onDebugOutput) {
-                onDebugOutput(`[DEBUG] Loading environment from shell: ${shell}\n`);
-
-                // Show which config files will be sourced
-                if (shell.includes('zsh')) {
-                    onDebugOutput(`[DEBUG] Will explicitly source: ~/.zprofile and ~/.zshrc\n`);
-                } else if (shell.includes('bash')) {
-                    onDebugOutput(`[DEBUG] Will explicitly source: ~/.bash_profile and ~/.bashrc\n`);
-                }
+                onDebugOutput(`[DEBUG] Loading environment from shell: ${shell} (${shellName})\n`);
+                onDebugOutput(`[DEBUG] Home directory: ${homeDir}\n`);
             }
 
             // Run the shell and explicitly source all config files
@@ -43,21 +86,38 @@ export class ProcessSpawner {
 
             // Determine which config files to source based on the shell
             let sourceCommand: string;
-            if (shell.includes('zsh')) {
-                // For zsh: source both profile and rc files
-                sourceCommand = `${shell} -c 'source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; env'`;
-            } else if (shell.includes('bash')) {
-                // For bash: source both profile and rc files
-                sourceCommand = `${shell} -c 'source ~/.bash_profile 2>/dev/null; source ~/.bashrc 2>/dev/null; env'`;
+
+            if (shellName === 'zsh') {
+                // For zsh: source zshenv (always loaded), zprofile (login), and zshrc (interactive)
+                if (onDebugOutput) {
+                    onDebugOutput(`[DEBUG] Will source: ~/.zshenv, ~/.zprofile, ~/.zshrc\n`);
+                }
+                sourceCommand = `${shell} -c 'source ~/.zshenv 2>/dev/null; source ~/.zprofile 2>/dev/null; source ~/.zshrc 2>/dev/null; env'`;
+            } else if (shellName === 'bash') {
+                // For bash: source profile (Debian/Ubuntu), bash_profile (macOS/Fedora), and bashrc
+                if (onDebugOutput) {
+                    onDebugOutput(`[DEBUG] Will source: ~/.profile, ~/.bash_profile, ~/.bashrc\n`);
+                }
+                sourceCommand = `${shell} -c 'source ~/.profile 2>/dev/null; source ~/.bash_profile 2>/dev/null; source ~/.bashrc 2>/dev/null; env'`;
+            } else if (shellName === 'fish') {
+                // For fish: use fish-specific config loading
+                if (onDebugOutput) {
+                    onDebugOutput(`[DEBUG] Will source: fish config via login shell\n`);
+                }
+                sourceCommand = `${shell} -l -c 'env'`;
             } else {
-                // Fallback to login + interactive flags
-                sourceCommand = `${shell} -l -i -c 'env'`;
+                // Fallback: use login shell flag (no -i to avoid TTY issues)
+                if (onDebugOutput) {
+                    onDebugOutput(`[DEBUG] Using login shell fallback for: ${shellName}\n`);
+                }
+                sourceCommand = `${shell} -l -c 'env'`;
             }
 
             const envOutput = execSync(sourceCommand, {
                 encoding: 'utf8',
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large environments
-                timeout: 5000 // 5 second timeout
+                timeout: 5000, // 5 second timeout
+                env: { ...process.env, HOME: homeDir } // Ensure HOME is set
             });
             const duration = Date.now() - startTime;
 
@@ -179,23 +239,32 @@ export class ProcessSpawner {
 
         // Resolve claudePath to absolute path
         // If it starts with ~, expand to home directory
+        // Priority: env vars -> os.homedir() (most reliable cross-platform)
         let resolvedClaudePath = config.claudePath;
         if (resolvedClaudePath.startsWith('~')) {
-            resolvedClaudePath = resolvedClaudePath.replace('~', shellEnv.HOME || '');
+            const homeDir = shellEnv.HOME || shellEnv.USERPROFILE || os.homedir();
+            resolvedClaudePath = resolvedClaudePath.replace('~', homeDir);
         }
 
         // If it's not an absolute path, try to find it in PATH
         if (!path.isAbsolute(resolvedClaudePath)) {
             // Check if it's a command name (like "claude")
             // Try to find it in PATH from shell environment
-            const pathDirs = (shellEnv.PATH || '').split(':').filter(dir => dir);
+            const pathSeparator = this.getPathSeparator();
+            const pathDirs = (shellEnv.PATH || '').split(pathSeparator).filter(dir => dir);
+
+            // On Windows, also check for .exe, .cmd, .bat extensions
+            const extensions = this.isWindows() ? ['', '.exe', '.cmd', '.bat'] : [''];
 
             for (const dir of pathDirs) {
-                const fullPath = path.join(dir, resolvedClaudePath);
-                if (fs.existsSync(fullPath)) {
-                    resolvedClaudePath = fullPath;
-                    break;
+                for (const ext of extensions) {
+                    const fullPath = path.join(dir, resolvedClaudePath + ext);
+                    if (fs.existsSync(fullPath)) {
+                        resolvedClaudePath = fullPath;
+                        break;
+                    }
                 }
+                if (path.isAbsolute(resolvedClaudePath)) break;
             }
         }
 
@@ -206,10 +275,17 @@ export class ProcessSpawner {
 
         // Use the shell to execute the command, which handles shebangs and PATH resolution
         // This is the same as running it from your terminal
+        const shell = this.getDefaultShell();
+
+        if (config.onDebugOutput) {
+            config.onDebugOutput(`[DEBUG] Using shell: ${shell}\n`);
+            config.onDebugOutput(`[DEBUG] Platform: ${process.platform}\n`);
+        }
+
         const options = {
             cwd: config.workingDir,
             env: shellEnv,
-            shell: shellEnv.SHELL || '/bin/zsh'
+            shell: shell
         };
 
         return spawn(resolvedClaudePath, config.args, options);

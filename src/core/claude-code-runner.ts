@@ -54,9 +54,10 @@ export class ClaudeCodeRunner {
 
         let claudePath = this.settings.claudeCodePath || 'claude';
 
-        // Expand ~ to home directory
+        // Expand ~ to home directory (use USERPROFILE on Windows, HOME on Unix)
         if (claudePath.startsWith('~')) {
-            claudePath = claudePath.replace('~', process.env.HOME || '');
+            const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+            claudePath = claudePath.replace('~', homeDir);
         }
 
         // Validate that Claude Code is available
