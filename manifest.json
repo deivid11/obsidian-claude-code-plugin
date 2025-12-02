@@ -1,7 +1,7 @@
 {
   "id": "claude-code-integration",
   "name": "Claude Code Integration",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "minAppVersion": "1.0.5",
   "description": "Integrate Claude Code AI assistant for intelligent note editing.",
   "author": "David Alcalá",
