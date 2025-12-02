@@ -2,7 +2,10 @@
  * Note Context Manager - Manages per-note conversation contexts
  */
 
-import { NoteContext, SessionHistoryItem } from '../core/types';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import { NoteContext } from '../core/types';
 import { ClaudeCodeRunner } from '../core/claude-code-runner';
 import { ClaudeCodeSettings } from '../core/settings';
 
@@ -45,10 +48,7 @@ export class NoteContextManager {
     /**
      * Load all note contexts from disk
      */
-    async loadContexts(vaultPath: string): Promise<void> {
-        const fs = require('fs');
-        const path = require('path');
-
+    loadContexts(vaultPath: string): void {
         const contextsDir = path.join(vaultPath, this.dataDir);
 
         if (!fs.existsSync(contextsDir)) {
@@ -91,13 +91,9 @@ export class NoteContextManager {
     /**
      * Save a note's context to disk
      */
-    async saveContext(notePath: string, vaultPath: string): Promise<void> {
+    saveContext(notePath: string, vaultPath: string): void {
         const context = this.contexts.get(notePath);
         if (!context) return;
-
-        const fs = require('fs');
-        const path = require('path');
-        const crypto = require('crypto');
 
         const noteHash = crypto.createHash('md5').update(notePath).digest('hex');
         const contextDir = path.join(vaultPath, this.dataDir, noteHash);

@@ -20,12 +20,13 @@ export class SessionManager {
      *
      * @param notePath Path to the note file
      * @param vaultPath Path to the vault root
+     * @param configDir Optional config directory name (defaults to '.obsidian')
      * @returns Session information
      */
-    static getSessionInfo(notePath: string, vaultPath: string): SessionInfo {
+    static getSessionInfo(notePath: string, vaultPath: string, configDir: string = '.obsidian'): SessionInfo {
         // Create a hash of the note path for the session directory name
         const noteHash = crypto.createHash('md5').update(notePath).digest('hex');
-        const sessionDir = path.join(vaultPath, '.obsidian', 'claude-code-sessions', noteHash);
+        const sessionDir = path.join(vaultPath, configDir, 'claude-code-sessions', noteHash);
 
         // Ensure the session directory exists
         if (!fs.existsSync(sessionDir)) {

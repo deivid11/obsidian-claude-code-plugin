@@ -1,7 +1,9 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import ClaudeCodePlugin from '../main';
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
 import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface ClaudeCodeSettings {
     claudeCodePath: string;
@@ -52,7 +54,7 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Claude Code Integration Settings' });
+        new Setting(containerEl).setName('Claude Code integration settings').setHeading();
 
         // Auto-detect Claude Code path
         new Setting(containerEl)
@@ -99,7 +101,7 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                     } else {
                         button.setButtonText('✗ Failed');
                         setTimeout(() => button.setButtonText('Test'), 2000);
-                        alert(`Claude Code test failed: ${result.error}`);
+                        new Notice(`Claude Code test failed: ${result.error}`);
                     }
                 }));
 
@@ -204,11 +206,10 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                 }));
 
         // Custom API Configuration Section
-        containerEl.createEl('h3', { text: 'Custom API Configuration' });
-        containerEl.createEl('p', {
-            text: 'Configure custom API endpoints for regions where Claude is not directly available. Leave empty to use default settings.',
-            cls: 'setting-item-description'
-        });
+        new Setting(containerEl)
+            .setName('Custom API configuration')
+            .setDesc('Configure custom API endpoints for regions where Claude is not directly available. Leave empty to use default settings.')
+            .setHeading();
 
         // Anthropic Base URL
         new Setting(containerEl)
@@ -267,8 +268,6 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
     private detectClaudeCodePath(): string | null {
         const isWindows = process.platform === 'win32';
         const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-        const fs = require('fs');
-        const path = require('path');
 
         let possiblePaths: string[] = [];
 
@@ -322,9 +321,6 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
     private async testClaudeCode(): Promise<{ success: boolean; error?: string }> {
         try {
             const cmdPath = this.plugin.settings.claudeCodePath || 'claude';
-            const { exec } = require('child_process');
-            const fs = require('fs');
-            const path = require('path');
 
             const isWindows = process.platform === 'win32';
             const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();

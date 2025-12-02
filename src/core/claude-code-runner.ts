@@ -1,13 +1,14 @@
 import { ChildProcess } from 'child_process';
-import { Notice } from 'obsidian';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ClaudeCodeSettings } from './settings';
-import { ResponseContentExtractor } from './streaming/response-content-extractor';
 import { StreamEventProcessor } from './streaming/stream-event-processor';
 import { SessionManager } from './session-manager';
 import { PromptBuilder } from './prompt-builder';
 import { CliArgsBuilder } from './cli-args-builder';
 import { ProcessSpawner } from './process-spawner';
 import { ResponseParser } from './response-parser';
+import { ResponseContentExtractor } from './streaming/response-content-extractor';
 
 export interface ClaudeCodeRequest {
     noteContent: string;
@@ -15,6 +16,7 @@ export interface ClaudeCodeRequest {
     notePath: string;
     selectedText?: string;
     vaultPath?: string;
+    configDir?: string;  // Obsidian config directory (e.g., '.obsidian')
     bypassPermissions?: boolean;
     runtimeModelOverride?: string;
     conversationalMode?: boolean;  // When true, no file modifications are allowed
@@ -92,7 +94,8 @@ export class ClaudeCodeRunner {
             // 1. Setup session
             const sessionInfo = SessionManager.getSessionInfo(
                 request.notePath,
-                request.vaultPath || ''
+                request.vaultPath || '',
+                request.configDir || '.obsidian'
             );
 
             this.sendOutput(sessionInfo.isNewSession
@@ -101,8 +104,6 @@ export class ClaudeCodeRunner {
             );
 
             // 1a. Create note.md file in session directory for Claude to edit
-            const fs = require('fs');
-            const path = require('path');
             const noteFilePath = path.join(sessionInfo.sessionDir, 'note.md');
             const contentToEdit = request.selectedText || request.noteContent;
             try {
@@ -248,8 +249,6 @@ export class ClaudeCodeRunner {
                 this.sendOutput(`\n[DEBUG] Process closed with code: ${code}`);
 
                 // Check if .claude directory was created (debug only)
-                const fs = require('fs');
-                const path = require('path');
                 const claudeDir = path.join(sessionInfo.sessionDir, '.claude');
                 const claudeDirCreated = fs.existsSync(claudeDir);
                 this.sendOutput(`\n[DEBUG] .claude directory after run: ${claudeDirCreated ? 'EXISTS' : 'NOT FOUND'}`);

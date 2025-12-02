@@ -203,10 +203,10 @@ export class AgentActivityParser {
             }
         }
 
-        if (text.includes('⏱️  Duration:')) {
+        if (text.includes('⏱️') && text.includes('Duration:')) {
             return this.matchAndCreate(
                 text,
-                /⏱️  Duration: (\d+)ms/,
+                /⏱️\s{2}Duration: (\d+)ms/,
                 '⏱️',
                 'Duration',
                 'duration',

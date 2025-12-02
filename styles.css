@@ -1,5 +1,27 @@
 /* Claude Code Plugin Styles */
 
+/* Utility classes for display states */
+.claude-code-hidden {
+    display: none !important;
+}
+
+.claude-code-visible {
+    display: block !important;
+}
+
+.claude-code-flex-visible {
+    display: flex !important;
+}
+
+.claude-code-inline-visible {
+    display: inline-block !important;
+}
+
+/* Cursor styles */
+.claude-code-cursor-pointer {
+    cursor: pointer;
+}
+
 .claude-code-view {
     padding: 16px;
     height: 100%;

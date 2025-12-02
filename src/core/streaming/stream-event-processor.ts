@@ -187,7 +187,7 @@ export class StreamEventProcessor {
             if (streamEvent.delta?.type === 'text_delta' && streamEvent.delta.text) {
                 // Stream text in real-time - mark as streaming to accumulate
                 // Also mark as assistant message for Result section
-                console.log('[Stream Processor] Sending text delta as assistant message');
+                console.debug('[Stream Processor] Sending text delta as assistant message');
                 sendOutput(streamEvent.delta.text, false, true, true);
             }
         } else if (streamEvent.type === 'content_block_start') {

@@ -33,7 +33,7 @@ export class UIBuilder {
     static buildHeader(container: HTMLElement): HTMLDivElement {
         const header = container.createEl('div', { cls: 'claude-code-header' });
         const headerTitle = header.createEl('div', { cls: 'claude-code-header-title' });
-        headerTitle.createEl('h4', { text: 'Claude Code Assistant' });
+        headerTitle.createEl('h4', { text: 'Claude Code assistant' });
 
         const currentNoteLabel = header.createEl('div', { cls: 'claude-code-current-note' });
         return currentNoteLabel;
@@ -59,7 +59,7 @@ export class UIBuilder {
         const inputSection = container.createEl('div', { cls: 'claude-code-input-section' });
 
         // Prompt textarea
-        inputSection.createEl('label', { text: 'Your Instructions:' });
+        inputSection.createEl('label', { text: 'Your instructions:' });
         const promptInput = inputSection.createEl('textarea', {
             cls: 'claude-code-prompt-input',
             attr: {
@@ -102,15 +102,14 @@ export class UIBuilder {
 
         const runButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
-            text: 'Run Claude Code'
+            text: 'Run Claude code'
         });
         runButton.addEventListener('click', onRun);
 
         const cancelButton = buttonContainer.createEl('button', {
             text: 'Cancel',
-            cls: 'claude-code-cancel-button'
+            cls: 'claude-code-cancel-button claude-code-hidden'
         });
-        cancelButton.style.display = 'none';
         cancelButton.addEventListener('click', onCancel);
 
         // Note: Status indicator has been moved into Result section (buildResultSection)
@@ -263,7 +262,7 @@ export class UIBuilder {
 
         permissionApprovalSection.createEl('div', {
             cls: 'permission-approval-header',
-            text: '🔐 Permission Required'
+            text: '🔐 Permission required'
         });
 
         permissionApprovalSection.createEl('div', {
@@ -276,15 +275,15 @@ export class UIBuilder {
         });
 
         const approvePermissionButton = approvalButtons.createEl('button', {
-            cls: 'mod-cta'
+            cls: 'mod-cta',
+            text: '✓ Approve & continue'
         });
-        approvePermissionButton.innerHTML = '✓ Approve & Continue';
         approvePermissionButton.addEventListener('click', onApprove);
 
         const denyPermissionButton = approvalButtons.createEl('button', {
-            cls: 'mod-warning'
+            cls: 'mod-warning',
+            text: '✗ Deny'
         });
-        denyPermissionButton.innerHTML = '✗ Deny';
         denyPermissionButton.addEventListener('click', onDeny);
 
         return { permissionApprovalSection, approvePermissionButton, denyPermissionButton };
@@ -419,15 +418,15 @@ export class UIBuilder {
         const previewButtons = previewContent.createEl('div', { cls: 'claude-code-preview-buttons' });
 
         const applyButton = previewButtons.createEl('button', {
-            cls: 'mod-cta'
+            cls: 'mod-cta',
+            text: '✓ Apply changes'
         });
-        applyButton.innerHTML = '✓ Apply Changes';
         applyButton.addEventListener('click', onApply);
 
         const rejectButton = previewButtons.createEl('button', {
-            cls: 'mod-warning'
+            cls: 'mod-warning',
+            text: '✗ Reject'
         });
-        rejectButton.innerHTML = '✗ Reject';
         rejectButton.addEventListener('click', onReject);
 
         // Tab switching logic

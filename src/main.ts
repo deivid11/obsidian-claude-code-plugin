@@ -35,12 +35,7 @@ export default class ClaudeCodePlugin extends Plugin {
             name: 'Quick run Claude Code (with default prompt)',
             callback: async () => {
                 await this.activateView();
-                // Focus the input area
-                const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_CLAUDE_CODE);
-                if (leaves.length > 0) {
-                    const view = leaves[0].view as ClaudeCodeView;
-                    // The view will be ready for user input
-                }
+                // The view will be ready for user input
             }
         });
 
@@ -64,14 +59,10 @@ export default class ClaudeCodePlugin extends Plugin {
 
         // Add settings tab
         this.addSettingTab(new ClaudeCodeSettingTab(this.app, this));
-
-        console.log('Claude Code plugin loaded');
     }
 
     onunload() {
-        // Clean up all Claude Code views
-        this.app.workspace.detachLeavesOfType(VIEW_TYPE_CLAUDE_CODE);
-        console.log('Claude Code plugin unloaded');
+        // Views are cleaned up automatically when the plugin is unloaded
     }
 
     async loadSettings() {

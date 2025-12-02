@@ -167,19 +167,20 @@ export class ToolOutputFormatter {
                 }
                 break;
 
-            case 'TodoWrite':
+            case 'TodoWrite': {
                 // TodoWrite needs the full JSON for parsing, so don't truncate
                 const todoInputStr = JSON.stringify(toolInput, null, 2);
                 lines.push(`   ${todoInputStr}\n`);
                 break;
+            }
 
-            default:
+            default: {
                 // Generic display for other tools
                 const inputStr = JSON.stringify(toolInput, null, 2);
                 if (format === 'compact') {
-                    const lines_arr = inputStr.split('\n');
-                    if (lines_arr.length > 10) {
-                        lines.push(`   ${lines_arr.slice(0, 10).join('\n')}\n   ...\n`);
+                    const linesArr = inputStr.split('\n');
+                    if (linesArr.length > 10) {
+                        lines.push(`   ${linesArr.slice(0, 10).join('\n')}\n   ...\n`);
                     } else {
                         lines.push(`   ${inputStr}\n`);
                     }
@@ -191,6 +192,7 @@ export class ToolOutputFormatter {
                     }
                 }
                 break;
+            }
         }
 
         return lines;

@@ -2,9 +2,9 @@
  * Claude Code View - Refactored to use modular components
  */
 
-import { ItemView, WorkspaceLeaf, MarkdownView, Notice, TFile } from 'obsidian';
+import { ItemView, WorkspaceLeaf, MarkdownView, Notice, MarkdownRenderer, Editor, FileSystemAdapter } from 'obsidian';
 import ClaudeCodePlugin from '../main';
-import { ClaudeCodeRunner, ClaudeCodeRequest, ClaudeCodeResponse } from '../core/claude-code-runner';
+import { ClaudeCodeRequest } from '../core/claude-code-runner';
 import { VIEW_TYPE_CLAUDE_CODE, SessionHistoryItem, AgentStep, NoteContext } from '../core/types';
 import { UIBuilder } from './ui-builder';
 import { OutputRenderer } from './output-renderer';
@@ -72,7 +72,7 @@ export class ClaudeCodeView extends ItemView {
         // Initialize managers
         this.contextManager = new NoteContextManager(
             this.plugin.settings,
-            '.obsidian/claude-code-sessions'
+            `${this.app.vault.configDir}/claude-code-sessions`
         );
         this.agentTracker = new AgentActivityTracker();
 
@@ -102,7 +102,7 @@ export class ClaudeCodeView extends ItemView {
         container.addClass('claude-code-view');
 
         // Load persisted contexts from disk
-        const vaultPath = (this.app.vault.adapter as any).basePath;
+        const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
         if (vaultPath) {
             await this.contextManager.loadContexts(vaultPath);
         }
@@ -278,15 +278,15 @@ export class ClaudeCodeView extends ItemView {
         this.agentTracker.restore(context.agentSteps);
 
         // Restore todos from output
-        console.log('[Load Note Context] Output lines count:', context.outputLines.length);
-        console.log('[Load Note Context] Agent steps count:', context.agentSteps.length);
+        console.debug('[Load Note Context] Output lines count:', context.outputLines.length);
+        console.debug('[Load Note Context] Agent steps count:', context.agentSteps.length);
 
         if (context.outputLines.length > 0) {
             // Try to parse todos from the restored output
             this.parseTodosFromOutput();
         } else {
             // No output, clear the todo list
-            console.log('[Load Note Context] Clearing todo list - no output');
+            console.debug('[Load Note Context] Clearing todo list - no output');
             this.clearTodoList();
         }
 
@@ -380,7 +380,7 @@ export class ClaudeCodeView extends ItemView {
             const noteContent = editor.getValue();
 
             // Get vault path
-            const vaultPath = (this.app.vault.adapter as any).basePath;
+            const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
             if (!vaultPath) {
                 new Notice('Could not determine vault path');
                 return;
@@ -391,19 +391,21 @@ export class ClaudeCodeView extends ItemView {
 
             // Prepare request
             context.currentRequest = {
-            noteContent,
-            userPrompt: prompt,
-            notePath: file.path,
-            selectedText: useSelectedTextOnly ? selectedText : undefined,
-            vaultPath: vaultPath,
-            runtimeModelOverride: this.modelSelect.value || undefined,
-            conversationalMode: this.conversationalModeCheckbox.checked
+                noteContent,
+                userPrompt: prompt,
+                notePath: file.path,
+                selectedText: useSelectedTextOnly ? selectedText : undefined,
+                vaultPath: vaultPath,
+                configDir: this.app.vault.configDir,
+                runtimeModelOverride: this.modelSelect.value || undefined,
+                conversationalMode: this.conversationalModeCheckbox.checked
             };
 
             // Update UI
             this.runButton.disabled = true;
             this.runButton.textContent = 'Running...';
-            this.cancelButton.style.display = 'inline-block';
+            this.cancelButton.removeClass('claude-code-hidden');
+            this.cancelButton.addClass('claude-code-inline-visible');
             context.outputLines = [];
             this.outputRenderer.clear();
             this.agentTracker.clear();
@@ -446,8 +448,9 @@ export class ClaudeCodeView extends ItemView {
 
             // Update UI
             this.runButton.disabled = false;
-            this.runButton.textContent = 'Run Claude Code';
-            this.cancelButton.style.display = 'none';
+            this.runButton.textContent = 'Run Claude code';
+            this.cancelButton.addClass('claude-code-hidden');
+            this.cancelButton.removeClass('claude-code-inline-visible');
 
             // Handle response
             if (response.success) {
@@ -494,7 +497,7 @@ export class ClaudeCodeView extends ItemView {
                     this.showPermissionApprovalSection();
                     // Show the request in the result panel (only if not already streamed)
                     const resultSection = document.getElementById('claude-code-result-section');
-                    const hasStreamedContent = resultSection && resultSection.style.display === 'block' && this.resultArea.children.length > 0;
+                    const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
 
                     if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                         this.showResult(response.assistantMessage);
@@ -504,7 +507,7 @@ export class ClaudeCodeView extends ItemView {
                     // No file changes - show result panel with Claude's response
                     // Only call showResult if we haven't been streaming (streaming already rendered the result)
                     const resultSection = document.getElementById('claude-code-result-section');
-                    const hasStreamedContent = resultSection && resultSection.style.display === 'block' && this.resultArea.children.length > 0;
+                    const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
 
                     if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                         this.showResult(response.assistantMessage);
@@ -553,7 +556,7 @@ export class ClaudeCodeView extends ItemView {
                 this.outputRenderer.appendStreamingText(text);
 
                 // Also append to Result section if it's an assistant message
-                console.log('[Append Output] isStreaming=true, isAssistantMessage=', isAssistantMessage);
+                console.debug('[Append Output] isStreaming=true, isAssistantMessage=', isAssistantMessage);
                 if (isAssistantMessage) {
                     this.appendToResult(text);
                 }
@@ -575,10 +578,10 @@ export class ClaudeCodeView extends ItemView {
                                           (this.resultArea && this.resultArea.children.length > 0);
 
                 if (!hasStreamingContent) {
-                    console.log('[Append Output] Non-streaming assistant message, adding to result');
+                    console.debug('[Append Output] Non-streaming assistant message, adding to result');
                     this.showResultMarkdown(text);
                 } else {
-                    console.log('[Append Output] Non-streaming assistant message, but already have streaming content - skipping');
+                    console.debug('[Append Output] Non-streaming assistant message, but already have streaming content - skipping');
                 }
                 // Fall through to also add to output
             }
@@ -672,7 +675,7 @@ export class ClaudeCodeView extends ItemView {
     private parseTodosFromOutput(): void {
         const context = this.getCurrentContext();
 
-        console.log('[Parse Todos] Total output lines:', context.outputLines.length);
+        console.debug('[Parse Todos] Total output lines:', context.outputLines.length);
 
         // Find ALL TodoWrite tool usage lines
         const todoWriteIndices: number[] = [];
@@ -682,41 +685,41 @@ export class ClaudeCodeView extends ItemView {
             }
         });
 
-        console.log('[Parse Todos] Found TodoWrite at indices:', todoWriteIndices);
+        console.debug('[Parse Todos] Found TodoWrite at indices:', todoWriteIndices);
 
         if (todoWriteIndices.length === 0) {
-            console.log('[Parse Todos] No TodoWrite found in output lines');
+            console.debug('[Parse Todos] No TodoWrite found in output lines');
             return;
         }
 
         // Use the LAST TodoWrite (most recent update)
         const lastTodoWriteIndex = todoWriteIndices[todoWriteIndices.length - 1];
 
-        console.log('[Parse Todos] Using last TodoWrite at index:', lastTodoWriteIndex);
+        console.debug('[Parse Todos] Using last TodoWrite at index:', lastTodoWriteIndex);
 
         if (lastTodoWriteIndex + 1 < context.outputLines.length) {
             // The next line after "Using tool: TodoWrite" should contain the JSON
             const jsonLine = context.outputLines[lastTodoWriteIndex + 1];
 
-            console.log('[Parse Todos] JSON line length:', jsonLine.length);
-            console.log('[Parse Todos] JSON line preview:', jsonLine.substring(0, 300));
+            console.debug('[Parse Todos] JSON line length:', jsonLine.length);
+            console.debug('[Parse Todos] JSON line preview:', jsonLine.substring(0, 300));
 
             try {
                 // The JSON is the entire line, just trim whitespace
                 const jsonStr = jsonLine.trim();
 
-                console.log('[Parse Todos] Trimmed JSON length:', jsonStr.length);
-                console.log('[Parse Todos] First char:', jsonStr[0], 'Last char:', jsonStr[jsonStr.length - 1]);
+                console.debug('[Parse Todos] Trimmed JSON length:', jsonStr.length);
+                console.debug('[Parse Todos] First char:', jsonStr[0], 'Last char:', jsonStr[jsonStr.length - 1]);
 
                 const toolInput = JSON.parse(jsonStr);
 
                 if (toolInput.todos && Array.isArray(toolInput.todos)) {
-                    console.log('[Parse Todos] Found todos count:', toolInput.todos.length);
-                    console.log('[Parse Todos] Todos:', JSON.stringify(toolInput.todos, null, 2));
+                    console.debug('[Parse Todos] Found todos count:', toolInput.todos.length);
+                    console.debug('[Parse Todos] Todos:', JSON.stringify(toolInput.todos, null, 2));
                     this.updateTodoList(toolInput.todos);
                 } else {
-                    console.log('[Parse Todos] No todos array found in parsed JSON');
-                    console.log('[Parse Todos] Parsed object keys:', Object.keys(toolInput));
+                    console.debug('[Parse Todos] No todos array found in parsed JSON');
+                    console.debug('[Parse Todos] Parsed object keys:', Object.keys(toolInput));
                 }
             } catch (error) {
                 console.error('[Parse Todos] Failed to parse todos JSON:', error);
@@ -735,12 +738,15 @@ export class ClaudeCodeView extends ItemView {
         // Show Result section
         const resultSection = document.getElementById('claude-code-result-section');
         if (resultSection) {
-            resultSection.style.display = 'block';
+            resultSection.removeClass('claude-code-hidden');
+            resultSection.addClass('claude-code-visible');
         }
 
         // Show status area, hide result area
-        this.statusIndicator.style.display = 'flex';
-        this.resultArea.style.display = 'none';
+        this.statusIndicator.removeClass('claude-code-hidden');
+        this.statusIndicator.addClass('claude-code-flex-visible');
+        this.resultArea.addClass('claude-code-hidden');
+        this.resultArea.removeClass('claude-code-visible');
         this.statusText.textContent = message;
     }
 
@@ -753,12 +759,15 @@ export class ClaudeCodeView extends ItemView {
         // Show Result section
         const resultSection = document.getElementById('claude-code-result-section');
         if (resultSection) {
-            resultSection.style.display = 'block';
+            resultSection.removeClass('claude-code-hidden');
+            resultSection.addClass('claude-code-visible');
         }
 
         // Show status area, hide result area
-        this.statusIndicator.style.display = 'flex';
-        this.resultArea.style.display = 'none';
+        this.statusIndicator.removeClass('claude-code-hidden');
+        this.statusIndicator.addClass('claude-code-flex-visible');
+        this.resultArea.addClass('claude-code-hidden');
+        this.resultArea.removeClass('claude-code-visible');
         this.statusText.textContent = message;
     }
 
@@ -792,14 +801,17 @@ export class ClaudeCodeView extends ItemView {
      */
     private hideStatus(): void {
         this.stopElapsedTimeTracking();
-        this.statusIndicator.style.display = 'none';
+        this.statusIndicator.addClass('claude-code-hidden');
+        this.statusIndicator.removeClass('claude-code-flex-visible');
 
         // If there's content in the result area, keep it and the section visible
         if (this.resultArea.children.length > 0) {
-            this.resultArea.style.display = 'block';
+            this.resultArea.removeClass('claude-code-hidden');
+            this.resultArea.addClass('claude-code-visible');
             const resultSection = document.getElementById('claude-code-result-section');
             if (resultSection) {
-                resultSection.style.display = 'block';
+                resultSection.removeClass('claude-code-hidden');
+                resultSection.addClass('claude-code-visible');
             }
         }
     }
@@ -807,10 +819,11 @@ export class ClaudeCodeView extends ItemView {
     /**
      * Show preview of changes
      */
-    private async showPreview(modifiedContent: string): Promise<void> {
+    private showPreview(modifiedContent: string): void {
         const previewSection = document.getElementById('claude-code-preview-section');
         if (previewSection) {
-            previewSection.style.display = 'block';
+            previewSection.removeClass('claude-code-hidden');
+            previewSection.addClass('claude-code-visible');
         }
 
         this.previewArea.empty();
@@ -834,24 +847,28 @@ export class ClaudeCodeView extends ItemView {
         // Show the modified content in a code block (Raw tab)
         const previewContent = this.previewArea.createEl('pre', { cls: 'claude-code-preview-content' });
         previewContent.createEl('code', { text: modifiedContent });
-        this.previewArea.style.display = 'none'; // Hidden by default, Diff tab is active
+        this.previewArea.addClass('claude-code-hidden'); // Hidden by default, Diff tab is active
 
         // Create diff view (shown by default)
         const diffArea = this.previewContentContainer.createEl('div', {
-            cls: 'claude-code-preview-diff'
+            cls: 'claude-code-preview-diff claude-code-visible'
         });
-        diffArea.style.display = 'block'; // Show by default
-        diffArea.innerHTML = this.generateDiff(originalContent, modifiedContent);
+
+        // Use safe DOM manipulation instead of innerHTML
+        const tempContainer = document.createElement('div');
+        tempContainer.innerHTML = this.generateDiff(originalContent, modifiedContent);
+        while (tempContainer.firstChild) {
+            diffArea.appendChild(tempContainer.firstChild);
+        }
 
         // Create rendered markdown view
         const renderedArea = this.previewContentContainer.createEl('div', {
-            cls: 'claude-code-preview-rendered'
+            cls: 'claude-code-preview-rendered claude-code-hidden'
         });
-        renderedArea.style.display = 'none';
 
         // Render the markdown
-        const { MarkdownRenderer } = require('obsidian');
-        MarkdownRenderer.renderMarkdown(
+        MarkdownRenderer.render(
+            this.app,
             modifiedContent,
             renderedArea,
             this.currentNotePath,
@@ -865,7 +882,8 @@ export class ClaudeCodeView extends ItemView {
     private hidePreview(): void {
         const previewSection = document.getElementById('claude-code-preview-section');
         if (previewSection) {
-            previewSection.style.display = 'none';
+            previewSection.addClass('claude-code-hidden');
+            previewSection.removeClass('claude-code-visible');
         }
     }
 
@@ -873,28 +891,31 @@ export class ClaudeCodeView extends ItemView {
      * Append text to result panel (for streaming assistant messages)
      */
     private appendToResult(text: string): void {
-        console.log('[Append To Result] Called with text:', text.substring(0, 50));
+        console.debug('[Append To Result] Called with text:', text.substring(0, 50));
 
         // If we've already hit the FINAL-CONTENT marker, ignore all subsequent chunks
         if (this.hitFinalContentMarker) {
-            console.log('[Append To Result] Already hit FINAL-CONTENT marker flag, ignoring chunk');
+            console.debug('[Append To Result] Already hit FINAL-CONTENT marker flag, ignoring chunk');
             return;
         }
 
         // Show the result section if not already visible
         const resultSection = document.getElementById('claude-code-result-section');
         if (resultSection) {
-            console.log('[Append To Result] Showing result section');
-            resultSection.style.display = 'block';
+            console.debug('[Append To Result] Showing result section');
+            resultSection.removeClass('claude-code-hidden');
+            resultSection.addClass('claude-code-visible');
         }
 
         // Hide status area, show result area
-        this.statusIndicator.style.display = 'none';
-        this.resultArea.style.display = 'block';
+        this.statusIndicator.addClass('claude-code-hidden');
+        this.statusIndicator.removeClass('claude-code-flex-visible');
+        this.resultArea.removeClass('claude-code-hidden');
+        this.resultArea.addClass('claude-code-visible');
 
         // Create streaming element if needed (with markdown-rendered class)
         if (!this.currentResultStreamingElement) {
-            console.log('[Append To Result] Creating streaming element');
+            console.debug('[Append To Result] Creating streaming element');
             this.currentResultStreamingElement = this.resultArea.createEl('div', {
                 cls: 'claude-code-result-streaming markdown-rendered'
             });
@@ -907,7 +928,7 @@ export class ClaudeCodeView extends ItemView {
 
         // Check if we've already encountered FINAL-CONTENT marker in the existing text
         if (accumulatedText.includes('---FINAL-CONTENT---')) {
-            console.log('[Append To Result] Found FINAL-CONTENT in existing text, cleaning up and setting flag');
+            console.debug('[Append To Result] Found FINAL-CONTENT in existing text, cleaning up and setting flag');
             this.cleanupFinalContentFromStream();
             this.hitFinalContentMarker = true;
             return;
@@ -924,7 +945,7 @@ export class ClaudeCodeView extends ItemView {
             (this.currentResultStreamingElement as any).accumulatedText = textBeforeMarker;
             this.renderStreamingMarkdown(textBeforeMarker);
 
-            console.log('[Append To Result] Hit FINAL-CONTENT marker, setting flag');
+            console.debug('[Append To Result] Hit FINAL-CONTENT marker, setting flag');
             this.hitFinalContentMarker = true;
             return;
         }
@@ -933,7 +954,7 @@ export class ClaudeCodeView extends ItemView {
         (this.currentResultStreamingElement as any).accumulatedText = combinedText;
         this.renderStreamingMarkdown(combinedText);
 
-        console.log('[Append To Result] Appended chunk, accumulated length:', combinedText.length);
+        console.debug('[Append To Result] Appended chunk, accumulated length:', combinedText.length);
 
         // Smart auto-scroll (respects user scroll position)
         this.autoScrollResult();
@@ -1027,9 +1048,9 @@ export class ClaudeCodeView extends ItemView {
         const blockContainer = document.createElement('div');
         blockContainer.addClass('markdown-block');
 
-        const { MarkdownRenderer } = require('obsidian');
         try {
-            MarkdownRenderer.renderMarkdown(
+            MarkdownRenderer.render(
+                this.app,
                 blockText,
                 blockContainer,
                 this.currentNotePath,
@@ -1074,7 +1095,7 @@ export class ClaudeCodeView extends ItemView {
 
         if (finalContentIndex === -1) return; // No marker found
 
-        console.log('[Cleanup FINAL-CONTENT] Removing marker and content after it');
+        console.debug('[Cleanup FINAL-CONTENT] Removing marker and content after it');
 
         // Get the text we want to keep (before the marker)
         const textToKeep = fullText.substring(0, finalContentIndex).trim();
@@ -1088,32 +1109,35 @@ export class ClaudeCodeView extends ItemView {
             text: textToKeep
         });
 
-        console.log('[Cleanup FINAL-CONTENT] Cleaned up, kept text length:', textToKeep.length);
+        console.debug('[Cleanup FINAL-CONTENT] Cleaned up, kept text length:', textToKeep.length);
     }
 
     /**
      * Show markdown content in result section (for non-streaming assistant messages)
      */
     private showResultMarkdown(text: string): void {
-        console.log('[Show Result Markdown] Called with text length:', text.length);
+        console.debug('[Show Result Markdown] Called with text length:', text.length);
 
         // Filter out FINAL-CONTENT and everything after it
         let filteredText = text;
         const finalContentIndex = text.indexOf('---FINAL-CONTENT---');
         if (finalContentIndex !== -1) {
             filteredText = text.substring(0, finalContentIndex).trim();
-            console.log('[Show Result Markdown] Filtered FINAL-CONTENT, new length:', filteredText.length);
+            console.debug('[Show Result Markdown] Filtered FINAL-CONTENT, new length:', filteredText.length);
         }
 
         // Show the result section
         const resultSection = document.getElementById('claude-code-result-section');
         if (resultSection) {
-            resultSection.style.display = 'block';
+            resultSection.removeClass('claude-code-hidden');
+            resultSection.addClass('claude-code-visible');
         }
 
         // Hide status area, show result area
-        this.statusIndicator.style.display = 'none';
-        this.resultArea.style.display = 'block';
+        this.statusIndicator.addClass('claude-code-hidden');
+        this.statusIndicator.removeClass('claude-code-flex-visible');
+        this.resultArea.removeClass('claude-code-hidden');
+        this.resultArea.addClass('claude-code-visible');
 
         // Create a new div for this markdown content
         const contentDiv = this.resultArea.createEl('div', {
@@ -1121,9 +1145,9 @@ export class ClaudeCodeView extends ItemView {
         });
 
         // Render as markdown
-        const { MarkdownRenderer } = require('obsidian');
         try {
-            MarkdownRenderer.renderMarkdown(
+            MarkdownRenderer.render(
+                this.app,
                 filteredText,
                 contentDiv,
                 this.currentNotePath,
@@ -1179,7 +1203,7 @@ export class ClaudeCodeView extends ItemView {
      */
     private finishResultStreaming(): void {
         if (this.currentResultStreamingElement) {
-            console.log('[Finish Result Streaming] Cleaning up streaming state');
+            console.debug('[Finish Result Streaming] Cleaning up streaming state');
 
             // Get the full accumulated text
             const fullAccumulatedText = (this.currentResultStreamingElement as any).fullText || '';
@@ -1188,7 +1212,7 @@ export class ClaudeCodeView extends ItemView {
             if (fullAccumulatedText && fullAccumulatedText.length > this.lastRenderedText.length) {
                 const unrenderedText = fullAccumulatedText.substring(this.lastRenderedText.length);
                 if (unrenderedText.trim()) {
-                    console.log('[Finish Result Streaming] Rendering final unrendered text:', unrenderedText.substring(0, 50));
+                    console.debug('[Finish Result Streaming] Rendering final unrendered text:', unrenderedText.substring(0, 50));
                     // Remove any plain text node
                     const lastChild = this.currentResultStreamingElement.lastChild;
                     if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
@@ -1231,12 +1255,12 @@ export class ClaudeCodeView extends ItemView {
         const finalContentIndex = message.indexOf('---FINAL-CONTENT---');
         if (finalContentIndex !== -1) {
             filteredMessage = message.substring(0, finalContentIndex).trim();
-            console.log('[Show Result] Filtered FINAL-CONTENT, original length:', message.length, 'filtered length:', filteredMessage.length);
+            console.debug('[Show Result] Filtered FINAL-CONTENT, original length:', message.length, 'filtered length:', filteredMessage.length);
         }
 
         // Render as markdown
-        const { MarkdownRenderer } = require('obsidian');
-        MarkdownRenderer.renderMarkdown(
+        MarkdownRenderer.render(
+            this.app,
             filteredMessage,
             this.resultArea,
             this.currentNotePath,
@@ -1245,12 +1269,15 @@ export class ClaudeCodeView extends ItemView {
 
         const resultSection = document.getElementById('claude-code-result-section');
         if (resultSection) {
-            resultSection.style.display = 'block';
+            resultSection.removeClass('claude-code-hidden');
+            resultSection.addClass('claude-code-visible');
         }
 
         // Hide status area, show result area
-        this.statusIndicator.style.display = 'none';
-        this.resultArea.style.display = 'block';
+        this.statusIndicator.addClass('claude-code-hidden');
+        this.statusIndicator.removeClass('claude-code-flex-visible');
+        this.resultArea.removeClass('claude-code-hidden');
+        this.resultArea.addClass('claude-code-visible');
     }
 
     /**
@@ -1258,14 +1285,16 @@ export class ClaudeCodeView extends ItemView {
      */
     private hideResult(): void {
         // Hide the result area but don't hide the entire section if status is showing
-        this.resultArea.style.display = 'none';
+        this.resultArea.addClass('claude-code-hidden');
+        this.resultArea.removeClass('claude-code-visible');
         this.resultArea.empty();
 
         // Only hide the entire section if status is also not visible
-        if (this.statusIndicator.style.display === 'none') {
+        if (this.statusIndicator.hasClass('claude-code-hidden')) {
             const resultSection = document.getElementById('claude-code-result-section');
             if (resultSection) {
-                resultSection.style.display = 'none';
+                resultSection.addClass('claude-code-hidden');
+                resultSection.removeClass('claude-code-visible');
             }
         }
     }
@@ -1275,7 +1304,8 @@ export class ClaudeCodeView extends ItemView {
      */
     private showPermissionApprovalSection(): void {
         if (this.permissionApprovalSection) {
-            this.permissionApprovalSection.style.display = 'block';
+            this.permissionApprovalSection.removeClass('claude-code-hidden');
+            this.permissionApprovalSection.addClass('claude-code-visible');
         }
     }
 
@@ -1284,7 +1314,8 @@ export class ClaudeCodeView extends ItemView {
      */
     private hidePermissionApprovalSection(): void {
         if (this.permissionApprovalSection) {
-            this.permissionApprovalSection.style.display = 'none';
+            this.permissionApprovalSection.addClass('claude-code-hidden');
+            this.permissionApprovalSection.removeClass('claude-code-visible');
         }
     }
 
@@ -1333,13 +1364,15 @@ export class ClaudeCodeView extends ItemView {
         const newRequest: ClaudeCodeRequest = {
             ...context.currentRequest,
             userPrompt: approvalPrompt,
-            bypassPermissions: true
+            bypassPermissions: true,
+            configDir: this.app.vault.configDir
         };
 
         // Update UI
         this.runButton.disabled = true;
         this.runButton.textContent = 'Running with permissions...';
-        this.cancelButton.style.display = 'inline-block';
+        this.cancelButton.removeClass('claude-code-hidden');
+        this.cancelButton.addClass('claude-code-inline-visible');
         this.outputRenderer.clear();
         this.hidePreview();
         this.hideResult();
@@ -1372,7 +1405,8 @@ export class ClaudeCodeView extends ItemView {
         // Update UI
         this.runButton.disabled = false;
         this.runButton.textContent = 'Run Claude Code';
-        this.cancelButton.style.display = 'none';
+        this.cancelButton.addClass('claude-code-hidden');
+        this.cancelButton.removeClass('claude-code-inline-visible');
 
         // Handle response (same as regular run)
         if (response.success) {
@@ -1388,7 +1422,7 @@ export class ClaudeCodeView extends ItemView {
 
             this.updateHistoryDisplay(context.history);
 
-            const vaultPath = (this.app.vault.adapter as any).basePath;
+            const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
             await this.contextManager.saveContext(file.path, vaultPath);
 
             if (response.modifiedContent && response.modifiedContent.trim()) {
@@ -1407,7 +1441,7 @@ export class ClaudeCodeView extends ItemView {
             } else {
                 // Only call showResult if we haven't been streaming (streaming already rendered the result)
                 const resultSection = document.getElementById('claude-code-result-section');
-                const hasStreamedContent = resultSection && resultSection.style.display === 'block' && this.resultArea.children.length > 0;
+                const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
 
                 if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                     this.showResult(response.assistantMessage);
@@ -1491,7 +1525,7 @@ export class ClaudeCodeView extends ItemView {
     /**
      * Apply changes to editor
      */
-    private applyChangesToEditor(content: string, editor: any): void {
+    private applyChangesToEditor(content: string, editor: Editor): void {
         const context = this.getCurrentContext();
         const cursorBefore = editor.getCursor();
 
@@ -1526,7 +1560,8 @@ export class ClaudeCodeView extends ItemView {
         context.isRunning = false;
         this.runButton.disabled = false;
         this.runButton.textContent = 'Run Claude Code';
-        this.cancelButton.style.display = 'none';
+        this.cancelButton.addClass('claude-code-hidden');
+        this.cancelButton.removeClass('claude-code-inline-visible');
         this.hideStatus();
         new Notice('Cancelled');
     }
@@ -1536,7 +1571,7 @@ export class ClaudeCodeView extends ItemView {
      */
     private respondToPrompt(response: string): void {
         // Future implementation for interactive Q&A
-        console.log('Interactive response:', response);
+        console.debug('Interactive response:', response);
     }
 
     /**
@@ -1557,14 +1592,16 @@ export class ClaudeCodeView extends ItemView {
         if (history.length === 0) {
             // Hide history section when empty
             if (historySection) {
-                historySection.style.display = 'none';
+                historySection.addClass('claude-code-hidden');
+                historySection.removeClass('claude-code-visible');
             }
             return;
         }
 
         // Show history section when there's content
         if (historySection) {
-            historySection.style.display = 'block';
+            historySection.removeClass('claude-code-hidden');
+            historySection.addClass('claude-code-visible');
         }
 
         for (const item of history.slice().reverse()) {
@@ -1581,7 +1618,7 @@ export class ClaudeCodeView extends ItemView {
 
             // Add click handler to restore from history
             li.addEventListener('click', () => this.restoreFromHistory(item));
-            li.style.cursor = 'pointer';
+            li.addClass('claude-code-cursor-pointer');
         }
     }
 
@@ -1628,7 +1665,8 @@ export class ClaudeCodeView extends ItemView {
         this.updateHistoryDisplay([]);
         const historySection = document.getElementById('claude-code-history-section');
         if (historySection) {
-            historySection.style.display = 'none';
+            historySection.addClass('claude-code-hidden');
+            historySection.removeClass('claude-code-visible');
         }
         new Notice('History cleared');
     }
@@ -1641,10 +1679,10 @@ export class ClaudeCodeView extends ItemView {
         const todoList = document.getElementById('claude-code-todo-list');
         const emptyPlan = document.getElementById('claude-code-empty-plan');
 
-        console.log('[Clear Todo List] Called');
+        console.debug('[Clear Todo List] Called');
 
         if (!todoList || !planColumn) {
-            console.log('[Clear Todo List] Elements not found');
+            console.debug('[Clear Todo List] Elements not found');
             return;
         }
 
@@ -1653,14 +1691,14 @@ export class ClaudeCodeView extends ItemView {
 
         // Hide empty message and list
         if (emptyPlan) {
-            emptyPlan.style.display = 'none';
+            emptyPlan.addClass('claude-code-hidden');
         }
-        todoList.style.display = 'none';
+        todoList.addClass('claude-code-hidden');
 
         // Hide the PLAN COLUMN only
-        planColumn.style.display = 'none';
+        planColumn.addClass('claude-code-hidden');
 
-        console.log('[Clear Todo List] Plan column hidden');
+        console.debug('[Clear Todo List] Plan column hidden');
     }
 
     /**
@@ -1679,9 +1717,9 @@ export class ClaudeCodeView extends ItemView {
 
         if (todos.length === 0) {
             // Hide the plan column - no plan
-            planColumn.style.display = 'none';
-            if (emptyPlan) emptyPlan.style.display = 'none';
-            todoList.style.display = 'none';
+            planColumn.addClass('claude-code-hidden');
+            if (emptyPlan) emptyPlan.addClass('claude-code-hidden');
+            todoList.addClass('claude-code-hidden');
 
             // Hide the entire container only if there are no agent steps either
             const agentStepsContainer = document.getElementById('claude-code-agent-steps');
@@ -1693,11 +1731,13 @@ export class ClaudeCodeView extends ItemView {
             // Show the agent container and plan column
             agentContainer.removeClass('is-hidden');
             agentContainer.addClass('is-visible');
-            planColumn.style.display = 'flex';
+            planColumn.removeClass('claude-code-hidden');
+            planColumn.addClass('claude-code-flex-visible');
 
             // Hide empty message and show todos
-            if (emptyPlan) emptyPlan.style.display = 'none';
-            todoList.style.display = 'flex';
+            if (emptyPlan) emptyPlan.addClass('claude-code-hidden');
+            todoList.removeClass('claude-code-hidden');
+            todoList.addClass('claude-code-flex-visible');
 
             // Add each todo
             for (const todo of todos) {
@@ -1750,7 +1790,7 @@ export class ClaudeCodeView extends ItemView {
         this.eventListeners = [];
 
         // Save all contexts
-        const vaultPath = (this.app.vault.adapter as any).basePath;
+        const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
         if (vaultPath) {
             try {
                 await this.contextManager.saveAllContexts(vaultPath);
