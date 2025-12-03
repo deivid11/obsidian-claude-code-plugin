@@ -4,6 +4,7 @@ import { execSync, exec } from 'child_process';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
+import { t, setLocale, getLocale, getAvailableLocales, Locale } from '../i18n';
 
 export interface ClaudeCodeSettings {
     claudeCodePath: string;
@@ -20,6 +21,8 @@ export interface ClaudeCodeSettings {
     anthropicAuthToken: string;
     anthropicModel: string;
     anthropicSmallFastModel: string;
+    // UI settings
+    language: Locale;
 }
 
 export const DEFAULT_SETTINGS: ClaudeCodeSettings = {
@@ -36,7 +39,9 @@ export const DEFAULT_SETTINGS: ClaudeCodeSettings = {
     anthropicBaseUrl: '',
     anthropicAuthToken: '',
     anthropicModel: '',
-    anthropicSmallFastModel: ''
+    anthropicSmallFastModel: '',
+    // UI settings
+    language: 'en'
 };
 
 export class ClaudeCodeSettingTab extends PluginSettingTab {
@@ -52,7 +57,26 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        ;
+        // Language setting at the top
+        new Setting(containerEl)
+            .setName(t('settings.language'))
+            .setDesc(t('settings.languageDesc'))
+            .addDropdown(dropdown => {
+                const locales = getAvailableLocales();
+                for (const locale of locales) {
+                    dropdown.addOption(locale.code, locale.name);
+                }
+                dropdown.setValue(getLocale())
+                    .onChange(async (value) => {
+                        this.plugin.settings.language = value as Locale;
+                        setLocale(value as Locale);
+                        await this.plugin.saveSettings();
+                        // Refresh settings display with new language
+                        this.display();
+                        // Notify user to reload for full effect
+                        new Notice('Language changed. Some UI elements will update on reload.');
+                    });
+            });
 
         // Auto-detect Claude Code path
         new Setting(containerEl)

@@ -7,6 +7,7 @@ import ClaudeCodePlugin from '../main';
 import { ClaudeCodeRequest } from '../core/claude-code-runner';
 import { VIEW_TYPE_CLAUDE_CODE, SessionHistoryItem, NoteContext } from '../core/types';
 import { UIBuilder } from './ui-builder';
+import { t } from '../i18n';
 
 /** Interface for streaming element with accumulated text */
 interface StreamingElementData {
@@ -254,7 +255,7 @@ export class ClaudeCodeView extends ItemView {
             const fileName = this.currentNotePath.split('/').pop() || 'Unknown';
             this.currentNoteLabel.textContent = `📝 ${fileName}`;
         } else {
-            this.currentNoteLabel.textContent = '📝 no note selected';
+            this.currentNoteLabel.textContent = '📝 ' + t('header.noNoteSelected');
         }
     }
 
@@ -336,13 +337,13 @@ export class ClaudeCodeView extends ItemView {
     private async handleRunClaudeCode(): Promise<void> {
         // Prevent concurrent runs
         if (this.isProcessing) {
-            new Notice('Already processing a request. Please wait.');
+            new Notice(t('notice.alreadyProcessing'));
             return;
         }
 
         const prompt = this.promptInput.value.trim();
         if (!prompt) {
-            new Notice('Please enter a prompt');
+            new Notice(t('notice.enterPrompt'));
             return;
         }
 
@@ -358,7 +359,7 @@ export class ClaudeCodeView extends ItemView {
             // Get active file
             const file = this.app.workspace.getActiveFile();
             if (!file) {
-                new Notice('No active note found, please open a Markdown note first');
+                new Notice(t('notice.noActiveNote'));
                 return;
             }
 
@@ -381,7 +382,7 @@ export class ClaudeCodeView extends ItemView {
             }
 
             if (!activeView || !activeView.editor) {
-                new Notice('No Markdown editor found, please make sure you have a note open');
+                new Notice(t('notice.noEditor'));
                 return;
             }
 
@@ -393,7 +394,7 @@ export class ClaudeCodeView extends ItemView {
             // Get vault path
             const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
             if (!vaultPath) {
-                new Notice('Could not determine vault path');
+                new Notice(t('notice.noVaultPath'));
                 return;
             }
 
@@ -414,7 +415,7 @@ export class ClaudeCodeView extends ItemView {
 
             // Update UI
             this.runButton.disabled = true;
-            this.runButton.textContent = 'Running...';
+            this.runButton.textContent = t('input.runningButton');
             this.cancelButton.removeClass('claude-code-hidden');
             this.cancelButton.addClass('claude-code-inline-visible');
             context.outputLines = [];
@@ -430,8 +431,8 @@ export class ClaudeCodeView extends ItemView {
             this.hitFinalContentMarker = false;
 
             // Show initial status with elapsed time tracking
-            this.showStatus('🤔 Claude is processing... 0.0s');
-            this.startElapsedTimeTracking('🤔 Claude is processing');
+            this.showStatus('🤔 ' + t('status.processing') + '... 0.0s');
+            this.startElapsedTimeTracking('🤔 ' + t('status.processing'));
 
             // Capture the note path for this specific run
             const runNotePath = file.path;
@@ -459,7 +460,7 @@ export class ClaudeCodeView extends ItemView {
 
             // Update UI
             this.runButton.disabled = false;
-            this.runButton.textContent = 'Run Claude Code';
+            this.runButton.textContent = t('input.runButton');
             this.cancelButton.addClass('claude-code-hidden');
             this.cancelButton.removeClass('claude-code-inline-visible');
 
@@ -490,14 +491,14 @@ export class ClaudeCodeView extends ItemView {
                 if (this.autoAcceptCheckbox.checked) {
                     // Only update UI if this is still the active note
                     if (this.currentNotePath === runNotePath) {
-                        this.showStatus('✅ Auto-applying changes...');
+                        this.showStatus('✅ ' + t('status.autoApplying'));
                     }
                     this.applyChangesToEditor(response.modifiedContent, editor);
                     // Hide status after auto-applying
                     if (this.currentNotePath === runNotePath) {
                         this.hideStatus();
                     }
-                    new Notice('✓ changes applied automatically');
+                    new Notice('✓ ' + t('notice.changesApplied'));
                 } else {
                     this.showPreview(response.modifiedContent);
                 }
@@ -513,7 +514,7 @@ export class ClaudeCodeView extends ItemView {
                     if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                         this.showResult(response.assistantMessage);
                     }
-                    new Notice('⚠️ Claude is requesting permission - please approve or deny');
+                    new Notice('⚠️ ' + t('notice.permissionRequest'));
                 } else {
                     // No file changes - show result panel with Claude's response
                     // Only call showResult if we haven't been streaming (streaming already rendered the result)
@@ -522,19 +523,19 @@ export class ClaudeCodeView extends ItemView {
 
                     if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                         this.showResult(response.assistantMessage);
-                        new Notice('✓ Claude Code completed');
+                        new Notice('✓ ' + t('notice.completed'));
                     } else if (hasStreamedContent) {
                         // Result was already streamed, just show notice
-                        new Notice('✓ Claude Code completed');
+                        new Notice('✓ ' + t('notice.completed'));
                     } else {
-                        new Notice('✓ Claude Code completed (no file changes)');
+                        new Notice('✓ ' + t('notice.completedNoChanges'));
                     }
                 }
             }
             } else {
             // Only update UI if this is still the active note
             if (this.currentNotePath === runNotePath) {
-                this.showErrorStatus('❌ Failed - see error below');
+                this.showErrorStatus('❌ ' + t('status.failed'));
             }
             new Notice(`✗ ${response.error || 'Unknown error'}`);
             context.history.push({
@@ -1373,7 +1374,7 @@ export class ClaudeCodeView extends ItemView {
 
         // Update UI
         this.runButton.disabled = true;
-        this.runButton.textContent = 'Running with permissions...';
+        this.runButton.textContent = t('input.runningButton');
         this.cancelButton.removeClass('claude-code-hidden');
         this.cancelButton.addClass('claude-code-inline-visible');
         this.outputRenderer.clear();
@@ -1381,8 +1382,8 @@ export class ClaudeCodeView extends ItemView {
         this.hideResult();
 
         // Show status with elapsed time tracking
-        this.showStatus('🔓 Running authorized tasks ... 0.0s');
-        this.startElapsedTimeTracking('🔓 Running authorized tasks');
+        this.showStatus('🔓 ' + t('status.runningAuthorized') + ' ... 0.0s');
+        this.startElapsedTimeTracking('🔓 ' + t('status.runningAuthorized'));
 
         // Capture the note path for this specific run
         const runNotePath = file.path;
@@ -1407,7 +1408,7 @@ export class ClaudeCodeView extends ItemView {
 
         // Update UI
         this.runButton.disabled = false;
-        this.runButton.textContent = 'Run Claude Code';
+        this.runButton.textContent = t('input.runButton');
         this.cancelButton.addClass('claude-code-hidden');
         this.cancelButton.removeClass('claude-code-inline-visible');
 
@@ -1431,13 +1432,13 @@ export class ClaudeCodeView extends ItemView {
             if (response.modifiedContent && response.modifiedContent.trim()) {
                 if (this.autoAcceptCheckbox.checked) {
                     if (this.currentNotePath === runNotePath) {
-                        this.showStatus('✅ Auto-applying changes...');
+                        this.showStatus('✅ ' + t('status.autoApplying'));
                     }
                     this.applyChangesToEditor(response.modifiedContent, editor);
                     if (this.currentNotePath === runNotePath) {
                         this.hideStatus();
                     }
-                    new Notice('✓ changes applied automatically');
+                    new Notice('✓ ' + t('notice.changesApplied'));
                 } else {
                     this.showPreview(response.modifiedContent);
                 }
@@ -1448,17 +1449,17 @@ export class ClaudeCodeView extends ItemView {
 
                 if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                     this.showResult(response.assistantMessage);
-                    new Notice('✓ Claude Code completed');
+                    new Notice('✓ ' + t('notice.completed'));
                 } else if (hasStreamedContent) {
                     // Result was already streamed, just show notice
-                    new Notice('✓ Claude Code completed');
+                    new Notice('✓ ' + t('notice.completed'));
                 } else {
-                    new Notice('✓ Claude Code completed (no file changes)');
+                    new Notice('✓ ' + t('notice.completedNoChanges'));
                 }
             }
         } else {
             if (this.currentNotePath === runNotePath) {
-                this.showErrorStatus('❌ Failed - see error below');
+                this.showErrorStatus('❌ ' + t('status.failed'));
             }
             new Notice(`✗ Claude Code failed: ${response.error || 'Unknown error'}`);
         }
@@ -1469,7 +1470,7 @@ export class ClaudeCodeView extends ItemView {
      */
     private handleDenyPermission(): void {
         this.hidePermissionApprovalSection();
-        new Notice('Permission denied - Claude will not proceed');
+        new Notice(t('notice.permissionDenied'));
     }
 
     /**
@@ -1479,7 +1480,7 @@ export class ClaudeCodeView extends ItemView {
         const context = this.getCurrentContext();
 
         if (!context.currentResponse?.modifiedContent) {
-            new Notice('⚠ no changes to apply');
+            new Notice('⚠ ' + t('notice.noChangesToApply'));
             console.error('[Apply Changes] No modified content found in context');
             return;
         }
@@ -1487,7 +1488,7 @@ export class ClaudeCodeView extends ItemView {
         // Get the active file
         const file = this.app.workspace.getActiveFile();
         if (!file) {
-            new Notice('⚠ no active file');
+            new Notice('⚠ ' + t('notice.noActiveFile'));
             console.error('[Apply Changes] No active file found');
             return;
         }
@@ -1510,7 +1511,7 @@ export class ClaudeCodeView extends ItemView {
         }
 
         if (!targetView || !targetView.editor) {
-            new Notice('⚠ no Markdown editor found');
+            new Notice('⚠ ' + t('notice.noEditor'));
             console.error('[Apply Changes] No markdown view or editor found');
             return;
         }
@@ -1518,9 +1519,9 @@ export class ClaudeCodeView extends ItemView {
         try {
             this.applyChangesToEditor(context.currentResponse.modifiedContent, targetView.editor);
             this.hidePreview();
-            new Notice('✓ changes applied successfully');
+            new Notice('✓ ' + t('notice.changesAppliedSuccess'));
         } catch (error) {
-            new Notice('✗ failed to apply changes');
+            new Notice('✗ ' + t('notice.failedApplyChanges'));
             console.error('[Apply Changes] Error:', error);
         }
     }
@@ -1551,7 +1552,7 @@ export class ClaudeCodeView extends ItemView {
      */
     private handleRejectChanges(): void {
         this.hidePreview();
-        new Notice('Changes rejected');
+        new Notice(t('notice.changesRejected'));
     }
 
     /**
@@ -1562,11 +1563,11 @@ export class ClaudeCodeView extends ItemView {
         context.runner.terminate();
         context.isRunning = false;
         this.runButton.disabled = false;
-        this.runButton.textContent = 'Run Claude Code';
+        this.runButton.textContent = t('input.runButton');
         this.cancelButton.addClass('claude-code-hidden');
         this.cancelButton.removeClass('claude-code-inline-visible');
         this.hideStatus();
-        new Notice('Cancelled');
+        new Notice(t('notice.cancelled'));
     }
 
     /**
@@ -1645,6 +1646,11 @@ export class ClaudeCodeView extends ItemView {
         // Restore response and request
         if (item.response) {
             context.currentResponse = item.response;
+
+            // BUG FIX: Restore the assistant message in the Result section
+            if (item.response.assistantMessage && item.response.assistantMessage.trim()) {
+                this.showResult(item.response.assistantMessage);
+            }
         }
         if (item.request) {
             context.currentRequest = item.request;
@@ -1653,10 +1659,10 @@ export class ClaudeCodeView extends ItemView {
         // Show preview if there's a successful response with content
         if (item.success && item.response?.modifiedContent) {
             this.showPreview(item.response.modifiedContent);
-            new Notice('History item restored with proposed changes');
+            new Notice(t('notice.historyRestoredWithChanges'));
         } else {
             this.hidePreview();
-            new Notice('History item restored');
+            new Notice(t('notice.historyRestored'));
         }
     }
 
@@ -1671,7 +1677,7 @@ export class ClaudeCodeView extends ItemView {
             historySection.addClass('claude-code-hidden');
             historySection.removeClass('claude-code-visible');
         }
-        new Notice('History cleared');
+        new Notice(t('notice.historyCleared'));
     }
 
     /**

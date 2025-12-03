@@ -2,6 +2,8 @@
  * UI Builder - Handles creation of UI elements for the Claude Code view
  */
 
+import { t } from '../i18n';
+
 export interface UIElements {
     promptInput: HTMLTextAreaElement;
     runButton: HTMLButtonElement;
@@ -33,7 +35,7 @@ export class UIBuilder {
     static buildHeader(container: HTMLElement): HTMLDivElement {
         const header = container.createEl('div', { cls: 'claude-code-header' });
         const headerTitle = header.createEl('div', { cls: 'claude-code-header-title' });
-        headerTitle.createEl('h4', { text: 'Claude Code assistant' });
+        headerTitle.createEl('h4', { text: t('header.title') });
 
         const currentNoteLabel = header.createEl('div', { cls: 'claude-code-current-note' });
         return currentNoteLabel;
@@ -59,11 +61,11 @@ export class UIBuilder {
         const inputSection = container.createEl('div', { cls: 'claude-code-input-section' });
 
         // Prompt textarea
-        inputSection.createEl('label', { text: 'Your instructions:' });
+        inputSection.createEl('label', { text: t('input.label') });
         const promptInput = inputSection.createEl('textarea', {
             cls: 'claude-code-prompt-input',
             attr: {
-                placeholder: 'e.g., "Add more examples to this section" or "Reorganize with better headers" (Enter to send, Ctrl+Enter for new line)'
+                placeholder: t('input.placeholder')
             }
         });
         promptInput.rows = 4;
@@ -74,25 +76,25 @@ export class UIBuilder {
         // Conversational mode checkbox
         const conversationalLabel = optionsDiv.createEl('label', { cls: 'claude-code-checkbox-label' });
         const conversationalModeCheckbox = conversationalLabel.createEl('input', { type: 'checkbox' });
-        conversationalLabel.appendText(' 💬 conversational mode (no file edits)');
-        conversationalLabel.title = 'Chat with Claude without modifying any files';
+        conversationalLabel.appendText(' ' + t('input.conversationalMode'));
+        conversationalLabel.title = t('input.conversationalModeTooltip');
 
         // Selected text only checkbox
         const selectedTextLabel = optionsDiv.createEl('label', { cls: 'claude-code-checkbox-label' });
         const selectedTextOnlyCheckbox = selectedTextLabel.createEl('input', { type: 'checkbox' });
-        selectedTextLabel.appendText(' Edit selected text only');
+        selectedTextLabel.appendText(' ' + t('input.selectedTextOnly'));
 
         // Auto-accept changes checkbox
         const autoAcceptLabel = optionsDiv.createEl('label', { cls: 'claude-code-checkbox-label' });
         const autoAcceptCheckbox = autoAcceptLabel.createEl('input', { type: 'checkbox' });
         autoAcceptCheckbox.checked = autoAcceptDefault;
-        autoAcceptLabel.appendText(' Auto-accept changes');
+        autoAcceptLabel.appendText(' ' + t('input.autoAccept'));
 
         // Model selector
         const modelSelectContainer = optionsDiv.createEl('div', { cls: 'claude-code-model-select' });
-        modelSelectContainer.createEl('label', { text: 'Model: ', cls: 'claude-code-model-label' });
+        modelSelectContainer.createEl('label', { text: t('input.modelLabel') + ' ', cls: 'claude-code-model-label' });
         const modelSelect = modelSelectContainer.createEl('select', { cls: 'claude-code-model-dropdown' });
-        modelSelect.createEl('option', { value: '', text: 'Default' });
+        modelSelect.createEl('option', { value: '', text: t('input.modelDefault') });
         modelSelect.createEl('option', { value: 'sonnet', text: 'Sonnet' });
         modelSelect.createEl('option', { value: 'opus', text: 'Opus' });
         modelSelect.createEl('option', { value: 'haiku', text: 'Haiku' });
@@ -102,12 +104,12 @@ export class UIBuilder {
 
         const runButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
-            text: 'Run Claude Code'
+            text: t('input.runButton')
         });
         runButton.addEventListener('click', onRun);
 
         const cancelButton = buttonContainer.createEl('button', {
-            text: 'Cancel',
+            text: t('input.cancelButton'),
             cls: 'claude-code-cancel-button claude-code-hidden'
         });
         cancelButton.addEventListener('click', onCancel);
@@ -141,7 +143,7 @@ export class UIBuilder {
         // Hidden by default - only shown when there's a plan
 
         const planHeader = planColumn.createEl('div', { cls: 'claude-code-agent-column-header' });
-        planHeader.createEl('span', { text: '📋 plan' });
+        planHeader.createEl('span', { text: '📋 ' + t('agent.planTitle') });
 
         planColumn.createEl('div', {
             cls: 'claude-code-todo-list claude-code-hidden',
@@ -151,7 +153,7 @@ export class UIBuilder {
 
         const emptyPlanMessage = planColumn.createEl('div', {
             cls: 'claude-code-empty-message claude-code-hidden',
-            text: 'No plan created yet'
+            text: t('agent.noPlan')
         });
         emptyPlanMessage.id = 'claude-code-empty-plan';
         // Hidden by default
@@ -163,7 +165,7 @@ export class UIBuilder {
         const activityHeader = activityColumn.createEl('div', { cls: 'claude-code-agent-column-header collapsible-header' });
         const activityTitle = activityHeader.createEl('span', { cls: 'collapsible-title' });
         activityTitle.createEl('span', { cls: 'collapse-indicator', text: '▼ ' });
-        activityTitle.appendText('Activity');
+        activityTitle.appendText(t('agent.activityTitle'));
 
         const activitySteps = activityColumn.createEl('div', {
             cls: 'claude-code-agent-steps collapsible-content',
@@ -197,7 +199,7 @@ export class UIBuilder {
 
         interactivePromptSection.createEl('div', {
             cls: 'interactive-prompt-header',
-            text: '❓ Claude is asking for confirmation'
+            text: '❓ ' + t('interactive.header')
         });
 
         interactivePromptSection.createEl('div', {
@@ -211,19 +213,19 @@ export class UIBuilder {
 
         const yesButton = promptButtons.createEl('button', {
             cls: 'mod-cta',
-            text: '✓ yes / sí'
+            text: '✓ ' + t('interactive.yesButton')
         });
         yesButton.addEventListener('click', () => onRespond('yes'));
 
         const noButton = promptButtons.createEl('button', {
-            text: '✗ no'
+            text: '✗ ' + t('interactive.noButton')
         });
         noButton.addEventListener('click', () => onRespond('no'));
 
         const customResponseInput = interactivePromptSection.createEl('input', {
             cls: 'interactive-prompt-input',
             attr: {
-                placeholder: 'Or type a custom response...',
+                placeholder: t('interactive.customPlaceholder'),
                 id: 'interactive-prompt-input'
             }
         });
@@ -255,12 +257,12 @@ export class UIBuilder {
 
         permissionApprovalSection.createEl('div', {
             cls: 'permission-approval-header',
-            text: '🔐 permission required'
+            text: '🔐 ' + t('permission.header')
         });
 
         permissionApprovalSection.createEl('div', {
             cls: 'permission-approval-message',
-            text: 'Claude is requesting permission to execute actions.'
+            text: t('permission.message')
         });
 
         const approvalButtons = permissionApprovalSection.createEl('div', {
@@ -269,13 +271,13 @@ export class UIBuilder {
 
         const approvePermissionButton = approvalButtons.createEl('button', {
             cls: 'mod-cta',
-            text: '✓ approve & continue'
+            text: '✓ ' + t('permission.approveButton')
         });
         approvePermissionButton.addEventListener('click', onApprove);
 
         const denyPermissionButton = approvalButtons.createEl('button', {
             cls: 'mod-warning',
-            text: '✗ deny'
+            text: '✗ ' + t('permission.denyButton')
         });
         denyPermissionButton.addEventListener('click', onDeny);
 
@@ -292,7 +294,7 @@ export class UIBuilder {
         const resultHeader = resultSection.createEl('div', { cls: 'claude-code-result-header collapsible-header' });
         const headerTitle = resultHeader.createEl('span', { cls: 'collapsible-title' });
         headerTitle.createEl('span', { cls: 'collapse-indicator', text: '▼ ' });
-        headerTitle.appendText('Result');
+        headerTitle.appendText(t('result.title'));
 
         const contentWrapper = resultSection.createEl('div', { cls: 'collapsible-content' });
 
@@ -334,12 +336,15 @@ export class UIBuilder {
         const outputHeader = outputSection.createEl('div', { cls: 'claude-code-output-header collapsible-header' });
 
         const headerTitle = outputHeader.createEl('span', { cls: 'collapsible-title' });
-        headerTitle.createEl('span', { cls: 'collapse-indicator', text: '▼ ' });
-        headerTitle.appendText('Output');
+        // Start collapsed by default
+        headerTitle.createEl('span', { cls: 'collapse-indicator', text: '▶ ' });
+        headerTitle.appendText(t('output.title'));
 
+        // Start collapsed by default
         const outputArea = outputSection.createEl('div', {
-            cls: 'claude-code-output-area collapsible-content'
+            cls: 'claude-code-output-area collapsible-content claude-code-hidden'
         });
+        outputSection.addClass('collapsed');
 
         // Toggle output visibility when clicking header
         outputHeader.addEventListener('click', () => {
@@ -376,16 +381,16 @@ export class UIBuilder {
         const previewHeader = previewSection.createEl('div', { cls: 'claude-code-preview-header collapsible-header' });
         const headerTitle = previewHeader.createEl('span', { cls: 'collapsible-title' });
         headerTitle.createEl('span', { cls: 'collapse-indicator', text: '▼ ' });
-        headerTitle.appendText('Preview');
+        headerTitle.appendText(t('preview.title'));
 
         const previewContent = previewSection.createEl('div', { cls: 'claude-code-preview-content-wrapper collapsible-content' });
 
         // Tabs container
         const previewTabsContainer = previewContent.createEl('div', { cls: 'claude-code-preview-tabs' });
 
-        const rawTab = previewTabsContainer.createEl('div', { cls: 'preview-tab', text: 'Raw' });
-        const diffTab = previewTabsContainer.createEl('div', { cls: 'preview-tab active', text: 'Diff' });
-        const renderedTab = previewTabsContainer.createEl('div', { cls: 'preview-tab', text: 'Rendered' });
+        const rawTab = previewTabsContainer.createEl('div', { cls: 'preview-tab', text: t('preview.tabRaw') });
+        const diffTab = previewTabsContainer.createEl('div', { cls: 'preview-tab active', text: t('preview.tabDiff') });
+        const renderedTab = previewTabsContainer.createEl('div', { cls: 'preview-tab', text: t('preview.tabRendered') });
 
         // Content container that holds all views
         const previewContentContainer = previewContent.createEl('div', { cls: 'claude-code-preview-content-container' });
@@ -397,13 +402,13 @@ export class UIBuilder {
 
         const applyButton = previewButtons.createEl('button', {
             cls: 'mod-cta',
-            text: '✓ apply changes'
+            text: '✓ ' + t('preview.applyButton')
         });
         applyButton.addEventListener('click', onApply);
 
         const rejectButton = previewButtons.createEl('button', {
             cls: 'mod-warning',
-            text: '✗ reject'
+            text: '✗ ' + t('preview.rejectButton')
         });
         rejectButton.addEventListener('click', onReject);
 
@@ -468,11 +473,12 @@ export class UIBuilder {
 
         const historyHeader = historySection.createEl('div', { cls: 'claude-code-history-header collapsible-header' });
         const headerTitle = historyHeader.createEl('span', { cls: 'collapsible-title' });
-        headerTitle.createEl('span', { cls: 'collapse-indicator', text: '▼ ' });
-        headerTitle.appendText('History');
+        // Start collapsed by default
+        headerTitle.createEl('span', { cls: 'collapse-indicator', text: '▶ ' });
+        headerTitle.appendText(t('history.title'));
 
         const clearHistoryBtn = historyHeader.createEl('button', {
-            text: 'Clear',
+            text: t('history.clearButton'),
             cls: 'claude-code-clear-history'
         });
         clearHistoryBtn.addEventListener('click', (e) => {
@@ -480,7 +486,9 @@ export class UIBuilder {
             onClearHistory();
         });
 
-        const historyList = historySection.createEl('ul', { cls: 'claude-code-history-list collapsible-content' });
+        // Start collapsed by default
+        const historyList = historySection.createEl('ul', { cls: 'claude-code-history-list collapsible-content claude-code-hidden' });
+        historySection.addClass('collapsed');
 
         // Add click handler to toggle collapse
         headerTitle.addEventListener('click', () => {

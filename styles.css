@@ -509,12 +509,12 @@
     }
 }
 
-/* Result Section */
+/* Result Section - Purple tint for primary content */
 .claude-code-result-section {
     flex-direction: column;
     gap: 8px;
-    background-color: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
+    background-color: rgba(139, 92, 246, 0.05);
+    border: 1px solid rgba(139, 92, 246, 0.2);
     border-radius: 6px;
     padding: 12px;
 }
@@ -573,7 +573,7 @@
     color: var(--text-normal);
     font-size: 13px;
     line-height: 1.6;
-    max-height: 400px;
+    /* Removed max-height limitation to allow content to flow naturally */
     overflow-y: auto;
     user-select: text; /* Make result text selectable */
     cursor: text;
@@ -603,13 +603,13 @@
     padding: 0;
 }
 
-/* Output Section */
+/* Output Section - Blue tint for debug/technical info */
 .claude-code-output-section {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    background-color: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
+    background-color: rgba(59, 130, 246, 0.05);
+    border: 1px solid rgba(59, 130, 246, 0.2);
     border-radius: 6px;
     padding: 12px;
 }
@@ -970,13 +970,13 @@
     color: var(--text-error);
 }
 
-/* History Section */
+/* History Section - Orange tint for reference material */
 .claude-code-history-section {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    background-color: var(--background-secondary);
-    border: 1px solid var(--background-modifier-border);
+    background-color: rgba(249, 115, 22, 0.05);
+    border: 1px solid rgba(249, 115, 22, 0.2);
     border-radius: 6px;
     padding: 12px;
 }

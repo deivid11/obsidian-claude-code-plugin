@@ -2,12 +2,16 @@ import { Plugin, WorkspaceLeaf } from 'obsidian';
 import { ClaudeCodeView } from './ui/view';
 import { VIEW_TYPE_CLAUDE_CODE } from './core/types';
 import { ClaudeCodeSettings, DEFAULT_SETTINGS, ClaudeCodeSettingTab } from './core/settings';
+import { initI18n } from './i18n';
 
 export default class ClaudeCodePlugin extends Plugin {
     settings: ClaudeCodeSettings;
 
     async onload() {
         await this.loadSettings();
+
+        // Initialize i18n with saved language preference
+        initI18n(this.settings.language);
 
         // Register the Claude Code view
         this.registerView(
