@@ -282,13 +282,31 @@ export class ProcessSpawner {
             config.onDebugOutput(`[DEBUG] Platform: ${process.platform}\n`);
         }
 
+        // Ensure UTF-8 locale is set for proper handling of special characters (ñ, á, ½, etc.)
+        // This is critical for non-ASCII characters to work correctly
+        const envWithUtf8 = {
+            ...shellEnv,
+            LANG: shellEnv.LANG || 'en_US.UTF-8',
+            LC_ALL: shellEnv.LC_ALL || 'en_US.UTF-8',
+            LC_CTYPE: shellEnv.LC_CTYPE || 'en_US.UTF-8',
+            PYTHONIOENCODING: 'utf-8',  // In case Claude CLI uses Python
+            NODE_OPTIONS: shellEnv.NODE_OPTIONS ? `${shellEnv.NODE_OPTIONS} --input-type=module` : ''
+        };
+
         const options = {
             cwd: config.workingDir,
-            env: shellEnv,
+            env: envWithUtf8,
             shell: shell
         };
 
-        return spawn(resolvedClaudePath, config.args, options);
+        const childProcess = spawn(resolvedClaudePath, config.args, options);
+
+        // Set encoding for stdin to UTF-8 for proper handling of special characters
+        if (childProcess.stdin) {
+            childProcess.stdin.setDefaultEncoding('utf8');
+        }
+
+        return childProcess;
     }
 
     /**
@@ -308,7 +326,8 @@ export class ProcessSpawner {
             };
 
             const jsonInput = JSON.stringify(inputMessage) + '\n';
-            process.stdin.write(jsonInput);
+            // Explicitly use UTF-8 encoding to handle special characters (½, ¼, ñ, etc.)
+            process.stdin.write(jsonInput, 'utf8');
             process.stdin.end();
         }
     }

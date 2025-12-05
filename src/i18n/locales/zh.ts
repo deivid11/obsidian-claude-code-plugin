@@ -66,6 +66,7 @@ export const zh = {
     'status.processing': 'Claude 正在处理',
     'status.autoApplying': '正在自动应用更改...',
     'status.runningAuthorized': '正在执行授权任务',
+    'status.runningInBackground': '后台运行中...',
     'status.failed': '失败 - 请查看下方错误信息',
 
     // Notifications

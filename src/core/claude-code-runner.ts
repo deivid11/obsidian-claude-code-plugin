@@ -1,6 +1,7 @@
 import { ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { StringDecoder } from 'string_decoder';
 import { ClaudeCodeSettings } from './settings';
 import { StreamEventProcessor } from './streaming/stream-event-processor';
 import { SessionManager } from './session-manager';
@@ -199,11 +200,13 @@ export class ClaudeCodeRunner {
             }
 
             // Capture stdout (stream-json format - one JSON object per line)
+            // Use StringDecoder to properly handle multi-byte UTF-8 characters
+            // that may be split across chunk boundaries (e.g., ½, ¼, ¾, etc.)
+            const stdoutDecoder = new StringDecoder('utf8');
             let buffer = '';
             this.currentProcess.stdout?.on('data', (data: Buffer) => {
-                //console.log(data.toString());
-                
-                buffer += data.toString();
+                // Use StringDecoder to properly decode UTF-8, handling split multi-byte chars
+                buffer += stdoutDecoder.write(data);
                 const lines = buffer.split('\n');
 
                 // Keep the last incomplete line in the buffer
@@ -227,9 +230,10 @@ export class ClaudeCodeRunner {
                 }
             });
 
-            // Capture stderr
+            // Capture stderr (also use StringDecoder for proper UTF-8 handling)
+            const stderrDecoder = new StringDecoder('utf8');
             this.currentProcess.stderr?.on('data', (data: Buffer) => {
-                const text = data.toString();
+                const text = stderrDecoder.write(data);
                 errorOutput += text;
                 this.sendOutput(`[stderr] ${text}`);
             });

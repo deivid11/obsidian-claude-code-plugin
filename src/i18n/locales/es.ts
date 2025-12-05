@@ -66,6 +66,7 @@ export const es = {
     'status.processing': 'Claude está procesando',
     'status.autoApplying': 'Aplicando cambios automáticamente...',
     'status.runningAuthorized': 'Ejecutando tareas autorizadas',
+    'status.runningInBackground': 'Ejecutando en segundo plano...',
     'status.failed': 'Falló - ver error abajo',
 
     // Notifications

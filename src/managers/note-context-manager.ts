@@ -15,6 +15,8 @@ interface SessionData {
     outputLines?: string[];
     agentSteps?: unknown[];
     notePath?: string;
+    pendingPreviewContent?: string;
+    originalPreviewContent?: string;
 }
 
 export class NoteContextManager {
@@ -82,7 +84,9 @@ export class NoteContextManager {
                         outputLines: data.outputLines ?? [],
                         agentSteps: (data.agentSteps ?? []) as NoteContext['agentSteps'],
                         runner: new ClaudeCodeRunner(this.settings),
-                        isRunning: false
+                        isRunning: false,
+                        pendingPreviewContent: data.pendingPreviewContent,
+                        originalPreviewContent: data.originalPreviewContent
                     };
 
                     // Store using the note path from the data
@@ -118,6 +122,8 @@ export class NoteContextManager {
             history: context.history,
             outputLines: context.outputLines,
             agentSteps: context.agentSteps,
+            pendingPreviewContent: context.pendingPreviewContent,
+            originalPreviewContent: context.originalPreviewContent,
             savedAt: new Date().toISOString()
         };
 
@@ -157,5 +163,31 @@ export class NoteContextManager {
      */
     hasContext(notePath: string): boolean {
         return this.contexts.has(notePath);
+    }
+
+    /**
+     * Get count of running processes
+     */
+    getRunningCount(): number {
+        let count = 0;
+        for (const context of this.contexts.values()) {
+            if (context.isRunning) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Get list of note paths that are currently running
+     */
+    getRunningNotePaths(): string[] {
+        const running: string[] = [];
+        for (const [notePath, context] of this.contexts.entries()) {
+            if (context.isRunning) {
+                running.push(notePath);
+            }
+        }
+        return running;
     }
 }

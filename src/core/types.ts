@@ -42,4 +42,13 @@ export interface NoteContext {
     cancelButton?: HTMLButtonElement;
     waitingForResponse?: boolean;
     selectedModel?: string;
+    lastPrompt?: string;
+    // Per-note preview/diff state
+    pendingPreviewContent?: string;  // Modified content waiting for approval
+    originalPreviewContent?: string; // Original content for diff display
+    // Per-note streaming result state (for restoring when switching notes mid-stream)
+    currentResultText?: string;      // Accumulated result text (streaming or complete)
+    // Per-note execution timing (for independent timers when switching notes)
+    executionStartTime?: number;     // Timestamp when execution started
+    baseStatusMessage?: string;      // Base message for status updates (e.g., "🤔 Processing")
 }

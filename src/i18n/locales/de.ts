@@ -66,6 +66,7 @@ export const de = {
     'status.processing': 'Claude verarbeitet',
     'status.autoApplying': 'Änderungen werden automatisch übernommen...',
     'status.runningAuthorized': 'Führe autorisierte Aufgaben aus',
+    'status.runningInBackground': 'Läuft im Hintergrund...',
     'status.failed': 'Fehlgeschlagen - siehe Fehler unten',
 
     // Notifications

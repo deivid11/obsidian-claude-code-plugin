@@ -56,6 +56,17 @@
     border: 1px solid var(--background-modifier-border);
 }
 
+/* Running indicator for other notes */
+.claude-code-running-indicator {
+    font-size: 11px;
+    color: var(--text-accent);
+    margin-left: 8px;
+    padding: 2px 6px;
+    background-color: var(--background-secondary-alt);
+    border-radius: 3px;
+    cursor: help;
+}
+
 /* Input Section */
 .claude-code-input-section {
     display: flex;
@@ -557,6 +568,26 @@
     border-bottom: none;
 }
 
+/* Last prompt display (shows what the user asked) */
+.claude-code-last-prompt {
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background-color: var(--background-secondary);
+    border-left: 3px solid var(--interactive-accent);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.claude-code-last-prompt-label {
+    font-weight: 500;
+}
+
+.claude-code-last-prompt-text {
+    font-style: italic;
+    word-break: break-word;
+}
+
 /* Status area within Result section (shown during processing) */
 .claude-code-status-area {
     display: flex;
@@ -567,6 +598,7 @@
     border: 1px solid var(--interactive-accent);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    margin-bottom: 12px;
 }
 
 .claude-code-result-area {

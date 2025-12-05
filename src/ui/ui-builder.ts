@@ -287,7 +287,7 @@ export class UIBuilder {
     /**
      * Build the result section (for non-edit responses)
      */
-    static buildResultSection(container: HTMLElement): { resultArea: HTMLDivElement; statusArea: HTMLDivElement; statusText: HTMLSpanElement } {
+    static buildResultSection(container: HTMLElement): { resultArea: HTMLDivElement; statusArea: HTMLDivElement; statusText: HTMLSpanElement; lastPromptArea: HTMLDivElement } {
         const resultSection = container.createEl('div', { cls: 'claude-code-result-section claude-code-hidden' });
         resultSection.id = 'claude-code-result-section';
 
@@ -297,6 +297,10 @@ export class UIBuilder {
         headerTitle.appendText(t('result.title'));
 
         const contentWrapper = resultSection.createEl('div', { cls: 'collapsible-content' });
+
+        // Last prompt area (shows what the user asked)
+        const lastPromptArea = contentWrapper.createEl('div', { cls: 'claude-code-last-prompt claude-code-hidden' });
+        lastPromptArea.id = 'claude-code-last-prompt';
 
         // Status area (shown during processing)
         const statusArea = contentWrapper.createEl('div', { cls: 'claude-code-status-area claude-code-hidden' });
@@ -325,7 +329,7 @@ export class UIBuilder {
             resultSection.toggleClass('collapsed', !isCollapsed);
         });
 
-        return { resultArea, statusArea, statusText };
+        return { resultArea, statusArea, statusText, lastPromptArea };
     }
 
     /**

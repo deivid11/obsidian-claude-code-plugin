@@ -35,6 +35,7 @@ export class ClaudeCodeView extends ItemView {
     private outputArea: HTMLDivElement;
     private outputSection: HTMLDivElement;
     private resultArea: HTMLDivElement;
+    private lastPromptArea: HTMLDivElement;
     private currentResultStreamingElement: HTMLElement | null = null;
     private hitFinalContentMarker: boolean = false;
     private userHasScrolled: boolean = false;
@@ -58,16 +59,13 @@ export class ClaudeCodeView extends ItemView {
 
     // State
     private currentNotePath: string = '';
-    private isProcessing: boolean = false;
 
     // Tool timing tracking
     private toolStartTimes: Map<string, number> = new Map();
     private lastToolKey: string | null = null;
 
-    // Execution timing tracking
-    private executionStartTime: number = 0;
+    // Execution timing tracking (interval is view-level, but start time is per-note in context)
     private elapsedTimeInterval: NodeJS.Timeout | null = null;
-    private baseStatusMessage: string = '';
 
     // Event listener cleanup tracking
     private eventListeners: Array<{
@@ -205,6 +203,7 @@ export class ClaudeCodeView extends ItemView {
         this.resultArea = resultElements.resultArea;
         this.statusIndicator = resultElements.statusArea;
         this.statusText = resultElements.statusText;
+        this.lastPromptArea = resultElements.lastPromptArea;
 
         // Setup smart auto-scroll detection
         this.setupSmartAutoScroll();
@@ -253,9 +252,39 @@ export class ClaudeCodeView extends ItemView {
     private updateCurrentNoteLabel(): void {
         if (this.currentNotePath) {
             const fileName = this.currentNotePath.split('/').pop() || 'Unknown';
-            this.currentNoteLabel.textContent = `📝 ${fileName}`;
+            const context = this.contextManager.getContext(this.currentNotePath);
+            const runningIndicator = context.isRunning ? ' 🔄' : '';
+            this.currentNoteLabel.textContent = `📝 ${fileName}${runningIndicator}`;
         } else {
             this.currentNoteLabel.textContent = '📝 ' + t('header.noNoteSelected');
+        }
+
+        // Show count of other running processes
+        this.updateRunningIndicator();
+    }
+
+    /**
+     * Update the indicator showing how many other notes have running processes
+     */
+    private updateRunningIndicator(): void {
+        const runningPaths = this.contextManager.getRunningNotePaths();
+        const otherRunning = runningPaths.filter(p => p !== this.currentNotePath);
+
+        // Find or create indicator element
+        let indicator = this.currentNoteLabel.parentElement?.querySelector('.claude-code-running-indicator') as HTMLElement;
+
+        if (otherRunning.length > 0) {
+            if (!indicator) {
+                indicator = document.createElement('span');
+                indicator.addClass('claude-code-running-indicator');
+                this.currentNoteLabel.parentElement?.appendChild(indicator);
+            }
+            const noteNames = otherRunning.map(p => p.split('/').pop() || 'Unknown').join(', ');
+            indicator.textContent = ` (${otherRunning.length} other running)`;
+            indicator.setAttribute('title', `Running: ${noteNames}`);
+            indicator.removeClass('claude-code-hidden');
+        } else if (indicator) {
+            indicator.addClass('claude-code-hidden');
         }
     }
 
@@ -292,6 +321,7 @@ export class ClaudeCodeView extends ItemView {
         // Restore todos from output
         console.debug('[Load Note Context] Output lines count:', context.outputLines.length);
         console.debug('[Load Note Context] Agent steps count:', context.agentSteps.length);
+        console.debug('[Load Note Context] isRunning:', context.isRunning);
 
         if (context.outputLines.length > 0) {
             // Try to parse todos from the restored output
@@ -312,16 +342,62 @@ export class ClaudeCodeView extends ItemView {
             this.modelSelect.value = this.plugin.settings.modelAlias;
         }
 
-        // Clear result section if there's no current response
-        if (!context.currentResponse || !context.currentResponse.assistantMessage) {
-            this.hideResult();
+        // Restore last prompt if available
+        if (context.lastPrompt) {
+            this.showLastPrompt(context.lastPrompt);
         } else {
-            // Restore result if exists
-            this.showResult(context.currentResponse.assistantMessage);
+            this.hideLastPrompt();
         }
 
-        // Hide preview section (will be shown if user clicks on result)
-        this.hidePreview();
+        // Update UI based on running state
+        if (context.isRunning) {
+            // Note is currently running - show running state
+            this.runButton.disabled = true;
+            this.runButton.textContent = t('input.runningButton');
+            this.cancelButton.removeClass('claude-code-hidden');
+            this.cancelButton.addClass('claude-code-inline-visible');
+
+            // Resume elapsed time tracking with the note's own start time
+            this.resumeElapsedTimeTracking();
+
+            // Restore any accumulated streaming result text
+            if (context.currentResultText) {
+                this.restoreStreamingResult(context.currentResultText);
+            }
+        } else {
+            // Stop timer when switching to non-running note
+            this.stopElapsedTimeTracking();
+            // Note is not running - show idle state
+            this.runButton.disabled = false;
+            this.runButton.textContent = t('input.runButton');
+            this.cancelButton.addClass('claude-code-hidden');
+            this.cancelButton.removeClass('claude-code-inline-visible');
+
+            // Hide status indicator for non-running notes
+            this.hideStatus();
+
+            // Clear result section if there's no current response
+            if (!context.currentResponse || !context.currentResponse.assistantMessage) {
+                this.hideResult();
+            } else {
+                // Restore result if exists
+                this.showResult(context.currentResponse.assistantMessage);
+            }
+        }
+
+        // Restore preview section if there's pending content, otherwise hide
+        if (context.pendingPreviewContent) {
+            this.restorePreview(context.pendingPreviewContent, context.originalPreviewContent || '');
+        } else {
+            this.hidePreviewUI();  // Just hide UI, don't clear context
+        }
+
+        // Restore permission approval section if there's a pending permission request
+        if (context.currentResponse?.isPermissionRequest && !context.isRunning) {
+            this.showPermissionApprovalSection();
+        } else {
+            this.hidePermissionApprovalSection();
+        }
     }
 
     /**
@@ -335,8 +411,10 @@ export class ClaudeCodeView extends ItemView {
      * Handle Run Claude Code button click
      */
     private async handleRunClaudeCode(): Promise<void> {
-        // Prevent concurrent runs
-        if (this.isProcessing) {
+        const context = this.getCurrentContext();
+
+        // Prevent concurrent runs on the same note
+        if (context.isRunning) {
             new Notice(t('notice.alreadyProcessing'));
             return;
         }
@@ -346,8 +424,6 @@ export class ClaudeCodeView extends ItemView {
             new Notice(t('notice.enterPrompt'));
             return;
         }
-
-        this.isProcessing = true;
 
         // Reset scroll state for new request
         this.resetScrollState();
@@ -398,9 +474,6 @@ export class ClaudeCodeView extends ItemView {
                 return;
             }
 
-            // Get context
-            const context = this.getCurrentContext();
-
             // Prepare request
             context.currentRequest = {
                 noteContent,
@@ -429,6 +502,10 @@ export class ClaudeCodeView extends ItemView {
             this.resultArea.empty();
             this.currentResultStreamingElement = null;
             this.hitFinalContentMarker = false;
+            context.currentResultText = undefined;  // Clear per-note result text
+
+            // Show the last prompt
+            this.showLastPrompt(prompt);
 
             // Show initial status with elapsed time tracking
             this.showStatus('🤔 ' + t('status.processing') + '... 0.0s');
@@ -439,6 +516,7 @@ export class ClaudeCodeView extends ItemView {
 
             // Run Claude Code
             context.isRunning = true;
+            this.updateCurrentNoteLabel();  // Update header to show running state
             const response = await context.runner.run(
             context.currentRequest,
             (line: string, isMarkdown?: boolean, isStreaming?: boolean | string, isAssistantMessage?: boolean) => {
@@ -454,6 +532,8 @@ export class ClaudeCodeView extends ItemView {
 
             context.isRunning = false;
             context.currentResponse = response;
+            context.executionStartTime = undefined;  // Clear per-note timing
+            context.baseStatusMessage = undefined;
 
             // Hide status
             this.hideStatus();
@@ -463,6 +543,9 @@ export class ClaudeCodeView extends ItemView {
             this.runButton.textContent = t('input.runButton');
             this.cancelButton.addClass('claude-code-hidden');
             this.cancelButton.removeClass('claude-code-inline-visible');
+
+            // Update header to reflect running state change
+            this.updateCurrentNoteLabel();
 
             // Handle response
             if (response.success) {
@@ -500,35 +583,44 @@ export class ClaudeCodeView extends ItemView {
                     }
                     new Notice('✓ ' + t('notice.changesApplied'));
                 } else {
-                    this.showPreview(response.modifiedContent);
+                    this.showPreview(response.modifiedContent, runNotePath);
                 }
             } else {
                 // Check if this is a permission request
                 if (response.isPermissionRequest) {
-                    // Show permission approval UI
-                    this.showPermissionApprovalSection();
-                    // Show the request in the result panel (only if not already streamed)
-                    const resultSection = document.getElementById('claude-code-result-section');
-                    const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
+                    // Only show UI if this is still the active note
+                    if (this.currentNotePath === runNotePath) {
+                        // Show permission approval UI
+                        this.showPermissionApprovalSection();
+                        // Show the request in the result panel (only if not already streamed)
+                        const resultSection = document.getElementById('claude-code-result-section');
+                        const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
 
-                    if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
-                        this.showResult(response.assistantMessage);
+                        if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
+                            this.showResult(response.assistantMessage);
+                        }
                     }
                     new Notice('⚠️ ' + t('notice.permissionRequest'));
                 } else {
                     // No file changes - show result panel with Claude's response
-                    // Only call showResult if we haven't been streaming (streaming already rendered the result)
-                    const resultSection = document.getElementById('claude-code-result-section');
-                    const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
+                    // Only update UI if this is still the active note
+                    if (this.currentNotePath === runNotePath) {
+                        // Only call showResult if we haven't been streaming (streaming already rendered the result)
+                        const resultSection = document.getElementById('claude-code-result-section');
+                        const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
 
-                    if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
-                        this.showResult(response.assistantMessage);
-                        new Notice('✓ ' + t('notice.completed'));
-                    } else if (hasStreamedContent) {
-                        // Result was already streamed, just show notice
-                        new Notice('✓ ' + t('notice.completed'));
+                        if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
+                            this.showResult(response.assistantMessage);
+                            new Notice('✓ ' + t('notice.completed'));
+                        } else if (hasStreamedContent) {
+                            // Result was already streamed, just show notice
+                            new Notice('✓ ' + t('notice.completed'));
+                        } else {
+                            new Notice('✓ ' + t('notice.completedNoChanges'));
+                        }
                     } else {
-                        new Notice('✓ ' + t('notice.completedNoChanges'));
+                        // Silently complete - user is on a different note
+                        new Notice('✓ ' + t('notice.completed'));
                     }
                 }
             }
@@ -548,9 +640,12 @@ export class ClaudeCodeView extends ItemView {
             });
             this.updateHistoryDisplay(context.history);
             }
-        } finally {
-            // Always reset processing flag
-            this.isProcessing = false;
+        } catch (error) {
+            // If an error occurred during execution, make sure to reset the running state
+            context.isRunning = false;
+            context.executionStartTime = undefined;
+            context.baseStatusMessage = undefined;
+            throw error;
         }
     }
 
@@ -561,7 +656,22 @@ export class ClaudeCodeView extends ItemView {
         const context = this.contextManager.getContext(notePath);
         context.outputLines.push(text);
 
-        // Only display if this is the current note
+        // Store streaming result text in the CORRECT note's context (not current note)
+        if (isAssistantMessage && isStreaming === true) {
+            // Accumulate result text in the target note's context
+            context.currentResultText = (context.currentResultText || '') + text;
+        }
+
+        // Parse and store agent activity in the note's context (regardless of current view)
+        // Skip for streaming partial text
+        if (isStreaming !== true) {
+            const agentStep = OutputRenderer.parseAgentActivity(text);
+            if (agentStep) {
+                context.agentSteps.push(agentStep);
+            }
+        }
+
+        // Only update UI if this is the current note being viewed
         if (notePath === this.currentNotePath) {
             // Handle streaming text accumulation
             if (isStreaming === true) {
@@ -570,7 +680,7 @@ export class ClaudeCodeView extends ItemView {
                 // Also append to Result section if it's an assistant message
                 console.debug('[Append Output] isStreaming=true, isAssistantMessage=', isAssistantMessage);
                 if (isAssistantMessage) {
-                    this.appendToResult(text);
+                    this.appendToResultUI(text);
                 }
 
                 return; // Don't process agent activity for partial text
@@ -600,7 +710,7 @@ export class ClaudeCodeView extends ItemView {
 
             this.outputRenderer.appendLine(text, isMarkdown);
 
-            // Parse and track agent activity with timing
+            // Update UI agent activity tracker with timing (UI only)
             const agentStep = OutputRenderer.parseAgentActivity(text);
             if (agentStep) {
                 // Detect if this is a tool start
@@ -627,12 +737,10 @@ export class ClaudeCodeView extends ItemView {
 
                         this.toolStartTimes.delete(this.lastToolKey);
                         this.lastToolKey = null;
-                        context.agentSteps.push(agentStep);
-                        return; // Skip the normal addStep below since we already called it
+                        return;
                     }
                 }
 
-                context.agentSteps.push(agentStep);
                 this.agentTracker.addStep(agentStep);
             }
         }
@@ -784,18 +892,48 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
-     * Start elapsed time tracking
+     * Start elapsed time tracking (stores timing in per-note context)
      */
     private startElapsedTimeTracking(baseMessage?: string): void {
-        this.executionStartTime = Date.now();
-        this.baseStatusMessage = baseMessage || '🤔 Claude is processing';
+        const context = this.getCurrentContext();
+        context.executionStartTime = Date.now();
+        context.baseStatusMessage = baseMessage || '🤔 Claude is processing';
 
-        // Update status every second with elapsed time
+        // Stop any existing interval before starting a new one
+        this.stopElapsedTimeTracking();
+
+        // Update status every 100ms with elapsed time
         this.elapsedTimeInterval = setInterval(() => {
-            const elapsed = Date.now() - this.executionStartTime;
-            const seconds = (elapsed / 1000).toFixed(1);
-            this.statusText.textContent = `${this.baseStatusMessage}... ${seconds}s`;
-        }, 100); // Update every 100ms for smooth display
+            const ctx = this.getCurrentContext();
+            if (ctx.executionStartTime) {
+                const elapsed = Date.now() - ctx.executionStartTime;
+                const seconds = (elapsed / 1000).toFixed(1);
+                this.statusText.textContent = `${ctx.baseStatusMessage || '🤔 Processing'}... ${seconds}s`;
+            }
+        }, 100);
+    }
+
+    /**
+     * Resume elapsed time tracking for current note (used when switching back to a running note)
+     */
+    private resumeElapsedTimeTracking(): void {
+        const context = this.getCurrentContext();
+        if (!context.executionStartTime || !context.isRunning) {
+            return;
+        }
+
+        // Stop any existing interval
+        this.stopElapsedTimeTracking();
+
+        // Start interval using the note's existing start time
+        this.elapsedTimeInterval = setInterval(() => {
+            const ctx = this.getCurrentContext();
+            if (ctx.executionStartTime) {
+                const elapsed = Date.now() - ctx.executionStartTime;
+                const seconds = (elapsed / 1000).toFixed(1);
+                this.statusText.textContent = `${ctx.baseStatusMessage || '🤔 Processing'}... ${seconds}s`;
+            }
+        }, 100);
     }
 
     /**
@@ -829,9 +967,66 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
-     * Show preview of changes
+     * Show the last prompt that was sent
      */
-    private showPreview(modifiedContent: string): void {
+    private showLastPrompt(prompt: string): void {
+        const context = this.getCurrentContext();
+        context.lastPrompt = prompt;
+
+        this.lastPromptArea.empty();
+        this.lastPromptArea.removeClass('claude-code-hidden');
+
+        // Create the prompt display with a label
+        this.lastPromptArea.createEl('span', {
+            cls: 'claude-code-last-prompt-label',
+            text: '💬 '
+        });
+
+        // Truncate long prompts for display
+        const displayPrompt = prompt.length > 200
+            ? prompt.substring(0, 200) + '...'
+            : prompt;
+
+        this.lastPromptArea.createEl('span', {
+            cls: 'claude-code-last-prompt-text',
+            text: displayPrompt
+        });
+
+        // Show full prompt on hover if truncated
+        if (prompt.length > 200) {
+            this.lastPromptArea.setAttribute('title', prompt);
+        }
+    }
+
+    /**
+     * Hide the last prompt display
+     */
+    private hideLastPrompt(): void {
+        this.lastPromptArea.addClass('claude-code-hidden');
+        this.lastPromptArea.empty();
+    }
+
+    /**
+     * Show preview of changes
+     * @param modifiedContent The modified content to preview
+     * @param forNotePath Optional: the note path this preview belongs to (defaults to current note)
+     */
+    private showPreview(modifiedContent: string, forNotePath?: string): void {
+        // Get the context for the specified note (or current note if not specified)
+        const targetNotePath = forNotePath || this.currentNotePath;
+        const context = this.contextManager.getContext(targetNotePath);
+        const originalContent = context.currentRequest?.selectedText || context.currentRequest?.noteContent || '';
+
+        // Store preview state in the TARGET note's context
+        context.pendingPreviewContent = modifiedContent;
+        context.originalPreviewContent = originalContent;
+
+        // Only show the UI if this is for the currently active note
+        if (targetNotePath !== this.currentNotePath) {
+            // Preview stored in context, but don't show UI since user is on a different note
+            return;
+        }
+
         const previewSection = document.getElementById('claude-code-preview-section');
         if (previewSection) {
             previewSection.removeClass('claude-code-hidden');
@@ -845,10 +1040,6 @@ export class ClaudeCodeView extends ItemView {
         if (oldRendered) oldRendered.remove();
         const oldDiff = this.previewContentContainer.querySelector('.claude-code-preview-diff');
         if (oldDiff) oldDiff.remove();
-
-        // Get original content
-        const context = this.getCurrentContext();
-        const originalContent = context.currentRequest?.selectedText || context.currentRequest?.noteContent || '';
 
         // Show character count comparison
         const statsDiv = this.previewArea.createEl('div', { cls: 'claude-code-preview-stats' });
@@ -886,9 +1077,22 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
-     * Hide preview
+     * Hide preview and clear context state
      */
     private hidePreview(): void {
+        this.hidePreviewUI();
+
+        // Clear preview state from context
+        const context = this.getCurrentContext();
+        context.pendingPreviewContent = undefined;
+        context.originalPreviewContent = undefined;
+    }
+
+    /**
+     * Hide preview UI only (without clearing context state)
+     * Used when switching notes to preserve each note's preview state
+     */
+    private hidePreviewUI(): void {
         const previewSection = document.getElementById('claude-code-preview-section');
         if (previewSection) {
             previewSection.addClass('claude-code-hidden');
@@ -897,34 +1101,117 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
-     * Append text to result panel (for streaming assistant messages)
+     * Restore preview from stored context state (used when switching notes)
      */
-    private appendToResult(text: string): void {
-        console.debug('[Append To Result] Called with text:', text.substring(0, 50));
+    private restorePreview(modifiedContent: string, originalContent: string): void {
+        const previewSection = document.getElementById('claude-code-preview-section');
+        if (previewSection) {
+            previewSection.removeClass('claude-code-hidden');
+            previewSection.addClass('claude-code-visible');
+        }
+
+        this.previewArea.empty();
+
+        // Remove old rendered and diff views if they exist
+        const oldRendered = this.previewContentContainer.querySelector('.claude-code-preview-rendered');
+        if (oldRendered) oldRendered.remove();
+        const oldDiff = this.previewContentContainer.querySelector('.claude-code-preview-diff');
+        if (oldDiff) oldDiff.remove();
+
+        // Show character count comparison
+        const statsDiv = this.previewArea.createEl('div', { cls: 'claude-code-preview-stats' });
+        statsDiv.createEl('span', { text: `${t('preview.originalLabel')} ${originalContent.length} ${t('preview.charsLabel')}` });
+        statsDiv.createEl('span', { text: ` → ${t('preview.modifiedLabel')} ${modifiedContent.length} ${t('preview.charsLabel')}` });
+        statsDiv.createEl('span', { text: ` (${modifiedContent.length - originalContent.length >= 0 ? '+' : ''}${modifiedContent.length - originalContent.length})` });
+
+        // Show the modified content in a code block (Raw tab)
+        const previewContent = this.previewArea.createEl('pre', { cls: 'claude-code-preview-content' });
+        previewContent.createEl('code', { text: modifiedContent });
+        this.previewArea.addClass('claude-code-hidden'); // Hidden by default, Diff tab is active
+
+        // Create diff view (shown by default)
+        const diffArea = this.previewContentContainer.createEl('div', {
+            cls: 'claude-code-preview-diff claude-code-visible'
+        });
+
+        // Use safe DOM manipulation
+        const diffElement = this.generateDiffElement(originalContent, modifiedContent);
+        diffArea.appendChild(diffElement);
+
+        // Create rendered markdown view
+        const renderedArea = this.previewContentContainer.createEl('div', {
+            cls: 'claude-code-preview-rendered claude-code-hidden'
+        });
+
+        // Render the markdown
+        void MarkdownRenderer.render(
+            this.app,
+            modifiedContent,
+            renderedArea,
+            this.currentNotePath,
+            this
+        );
+    }
+
+    /**
+     * Restore streaming result from context (used when switching back to a running note)
+     */
+    private restoreStreamingResult(text: string): void {
+        // Show the result section
+        const resultSection = document.getElementById('claude-code-result-section');
+        if (resultSection) {
+            resultSection.removeClass('claude-code-hidden');
+            resultSection.addClass('claude-code-visible');
+        }
+
+        // Show result area
+        this.resultArea.removeClass('claude-code-hidden');
+        this.resultArea.addClass('claude-code-visible');
+
+        // Clear and recreate streaming element
+        this.resultArea.empty();
+        this.currentResultStreamingElement = this.resultArea.createEl('div', {
+            cls: 'claude-code-result-streaming markdown-rendered'
+        });
+        (this.currentResultStreamingElement as unknown as StreamingElementData).accumulatedText = text;
+
+        // Reset rendering state and render the accumulated text
+        this.lastRenderedText = '';
+        this.hitFinalContentMarker = false;
+        this.renderStreamingMarkdown(text);
+
+        console.debug('[Restore Streaming Result] Restored text length:', text.length);
+    }
+
+    /**
+     * Append text to result panel UI only (context update handled by appendOutputToNote)
+     * Used for streaming assistant messages when the current note is active
+     */
+    private appendToResultUI(text: string): void {
+        console.debug('[Append To Result UI] Called with text:', text.substring(0, 50));
 
         // If we've already hit the FINAL-CONTENT marker, ignore all subsequent chunks
         if (this.hitFinalContentMarker) {
-            console.debug('[Append To Result] Already hit FINAL-CONTENT marker flag, ignoring chunk');
+            console.debug('[Append To Result UI] Already hit FINAL-CONTENT marker flag, ignoring chunk');
             return;
         }
 
         // Show the result section if not already visible
         const resultSection = document.getElementById('claude-code-result-section');
         if (resultSection) {
-            console.debug('[Append To Result] Showing result section');
+            console.debug('[Append To Result UI] Showing result section');
             resultSection.removeClass('claude-code-hidden');
             resultSection.addClass('claude-code-visible');
         }
 
-        // Hide status area, show result area
-        this.statusIndicator.addClass('claude-code-hidden');
-        this.statusIndicator.removeClass('claude-code-flex-visible');
+        // Show result area (but keep status visible - process may still be running!)
+        // The status will be hidden when the process completes via hideStatus()
         this.resultArea.removeClass('claude-code-hidden');
         this.resultArea.addClass('claude-code-visible');
 
         // Create streaming element if needed (with markdown-rendered class)
         if (!this.currentResultStreamingElement) {
-            console.debug('[Append To Result] Creating streaming element');
+            console.debug('[Append To Result UI] Creating streaming element');
             this.currentResultStreamingElement = this.resultArea.createEl('div', {
                 cls: 'claude-code-result-streaming markdown-rendered'
             });
@@ -937,7 +1224,7 @@ export class ClaudeCodeView extends ItemView {
 
         // Check if we've already encountered FINAL-CONTENT marker in the existing text
         if (accumulatedText.includes('---FINAL-CONTENT---')) {
-            console.debug('[Append To Result] Found FINAL-CONTENT in existing text, cleaning up and setting flag');
+            console.debug('[Append To Result UI] Found FINAL-CONTENT in existing text, cleaning up and setting flag');
             this.cleanupFinalContentFromStream();
             this.hitFinalContentMarker = true;
             return;
@@ -954,7 +1241,7 @@ export class ClaudeCodeView extends ItemView {
             (this.currentResultStreamingElement as unknown as StreamingElementData).accumulatedText = textBeforeMarker;
             this.renderStreamingMarkdown(textBeforeMarker);
 
-            console.debug('[Append To Result] Hit FINAL-CONTENT marker, setting flag');
+            console.debug('[Append To Result UI] Hit FINAL-CONTENT marker, setting flag');
             this.hitFinalContentMarker = true;
             return;
         }
@@ -963,7 +1250,7 @@ export class ClaudeCodeView extends ItemView {
         (this.currentResultStreamingElement as unknown as StreamingElementData).accumulatedText = combinedText;
         this.renderStreamingMarkdown(combinedText);
 
-        console.debug('[Append To Result] Appended chunk, accumulated length:', combinedText.length);
+        console.debug('[Append To Result UI] Appended chunk, accumulated length:', combinedText.length);
 
         // Smart auto-scroll (respects user scroll position)
         this.autoScrollResult();
@@ -1139,9 +1426,7 @@ export class ClaudeCodeView extends ItemView {
             resultSection.addClass('claude-code-visible');
         }
 
-        // Hide status area, show result area
-        this.statusIndicator.addClass('claude-code-hidden');
-        this.statusIndicator.removeClass('claude-code-flex-visible');
+        // Show result area (but keep status visible - process may still be running!)
         this.resultArea.removeClass('claude-code-hidden');
         this.resultArea.addClass('claude-code-visible');
 
@@ -1402,6 +1687,8 @@ export class ClaudeCodeView extends ItemView {
 
         context.isRunning = false;
         context.currentResponse = response;
+        context.executionStartTime = undefined;
+        context.baseStatusMessage = undefined;
 
         // Hide status
         this.hideStatus();
@@ -1409,6 +1696,7 @@ export class ClaudeCodeView extends ItemView {
         // Update UI
         this.runButton.disabled = false;
         this.runButton.textContent = t('input.runButton');
+
         this.cancelButton.addClass('claude-code-hidden');
         this.cancelButton.removeClass('claude-code-inline-visible');
 
@@ -1440,21 +1728,26 @@ export class ClaudeCodeView extends ItemView {
                     }
                     new Notice('✓ ' + t('notice.changesApplied'));
                 } else {
-                    this.showPreview(response.modifiedContent);
+                    this.showPreview(response.modifiedContent, runNotePath);
                 }
             } else {
-                // Only call showResult if we haven't been streaming (streaming already rendered the result)
-                const resultSection = document.getElementById('claude-code-result-section');
-                const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
+                // Only update UI if this is still the active note
+                if (this.currentNotePath === runNotePath) {
+                    // Only call showResult if we haven't been streaming (streaming already rendered the result)
+                    const resultSection = document.getElementById('claude-code-result-section');
+                    const hasStreamedContent = resultSection && resultSection.hasClass('claude-code-visible') && this.resultArea.children.length > 0;
 
-                if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
-                    this.showResult(response.assistantMessage);
-                    new Notice('✓ ' + t('notice.completed'));
-                } else if (hasStreamedContent) {
-                    // Result was already streamed, just show notice
-                    new Notice('✓ ' + t('notice.completed'));
+                    if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
+                        this.showResult(response.assistantMessage);
+                        new Notice('✓ ' + t('notice.completed'));
+                    } else if (hasStreamedContent) {
+                        // Result was already streamed, just show notice
+                        new Notice('✓ ' + t('notice.completed'));
+                    } else {
+                        new Notice('✓ ' + t('notice.completedNoChanges'));
+                    }
                 } else {
-                    new Notice('✓ ' + t('notice.completedNoChanges'));
+                    new Notice('✓ ' + t('notice.completed'));
                 }
             }
         } else {
@@ -1479,7 +1772,10 @@ export class ClaudeCodeView extends ItemView {
     private handleApplyChanges(): void {
         const context = this.getCurrentContext();
 
-        if (!context.currentResponse?.modifiedContent) {
+        // Use pending preview content (per-note state) or fall back to response
+        const contentToApply = context.pendingPreviewContent || context.currentResponse?.modifiedContent;
+
+        if (!contentToApply) {
             new Notice('⚠ ' + t('notice.noChangesToApply'));
             console.error('[Apply Changes] No modified content found in context');
             return;
@@ -1517,7 +1813,7 @@ export class ClaudeCodeView extends ItemView {
         }
 
         try {
-            this.applyChangesToEditor(context.currentResponse.modifiedContent, targetView.editor);
+            this.applyChangesToEditor(contentToApply, targetView.editor);
             this.hidePreview();
             new Notice('✓ ' + t('notice.changesAppliedSuccess'));
         } catch (error) {
@@ -1562,6 +1858,8 @@ export class ClaudeCodeView extends ItemView {
         const context = this.getCurrentContext();
         context.runner.terminate();
         context.isRunning = false;
+        context.executionStartTime = undefined;
+        context.baseStatusMessage = undefined;
         this.runButton.disabled = false;
         this.runButton.textContent = t('input.runButton');
         this.cancelButton.addClass('claude-code-hidden');
