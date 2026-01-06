@@ -357,6 +357,10 @@ export class ClaudeCodeView extends ItemView {
             this.cancelButton.removeClass('claude-code-hidden');
             this.cancelButton.addClass('claude-code-inline-visible');
 
+            // Show status area (must be visible before resuming timer)
+            const statusMessage = context.baseStatusMessage || ('🤔 ' + t('status.processing'));
+            this.showStatus(statusMessage + '... 0.0s');
+
             // Resume elapsed time tracking with the note's own start time
             this.resumeElapsedTimeTracking();
 
@@ -496,18 +500,16 @@ export class ClaudeCodeView extends ItemView {
             this.agentTracker.clear();
             this.clearTodoList();
             this.hidePreview();
-            this.hideResult();
 
-            // Clear result area for new streaming messages
+            // Clear result area for new streaming messages (don't hide entire section)
             this.resultArea.empty();
+            this.resultArea.addClass('claude-code-hidden');
             this.currentResultStreamingElement = null;
             this.hitFinalContentMarker = false;
             context.currentResultText = undefined;  // Clear per-note result text
 
-            // Show the last prompt
+            // Show the last prompt and status together (keeps prompt visible during processing)
             this.showLastPrompt(prompt);
-
-            // Show initial status with elapsed time tracking
             this.showStatus('🤔 ' + t('status.processing') + '... 0.0s');
             this.startElapsedTimeTracking('🤔 ' + t('status.processing'));
 
@@ -1664,9 +1666,12 @@ export class ClaudeCodeView extends ItemView {
         this.cancelButton.addClass('claude-code-inline-visible');
         this.outputRenderer.clear();
         this.hidePreview();
-        this.hideResult();
 
-        // Show status with elapsed time tracking
+        // Clear result area but keep section visible for prompt and status
+        this.resultArea.empty();
+        this.resultArea.addClass('claude-code-hidden');
+
+        // Show status with elapsed time tracking (keeps prompt visible)
         this.showStatus('🔓 ' + t('status.runningAuthorized') + ' ... 0.0s');
         this.startElapsedTimeTracking('🔓 ' + t('status.runningAuthorized'));
 
