@@ -257,7 +257,15 @@ export class StreamEventProcessor {
         for (const field of displayFields) {
             const value = event[field];
             if (value !== undefined) {
-                sendOutput(`   ${field}: ${String(value)}\n`);
+                let displayValue: string;
+                if (typeof value === 'object' && value !== null) {
+                    displayValue = JSON.stringify(value);
+                } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                    displayValue = String(value);
+                } else {
+                    displayValue = JSON.stringify(value);
+                }
+                sendOutput(`   ${field}: ${displayValue}\n`);
             }
         }
 

@@ -4,12 +4,12 @@
 export const en = {
     // Header
     'header.title': 'Claude Code assistant',
-    'header.noNoteSelected': 'no note selected',
+    'header.noNoteSelected': 'No note selected',
 
     // Input Section
     'input.label': 'Your instructions:',
     'input.placeholder': 'e.g., "Add more examples to this section" or "Reorganize with better headers" (Enter to send, Ctrl+Enter for new line)',
-    'input.conversationalMode': 'conversational mode (no file edits)',
+    'input.conversationalMode': 'Conversational mode (no file edits)',
     'input.conversationalModeTooltip': 'Chat with Claude without modifying any files',
     'input.selectedTextOnly': 'Edit selected text only',
     'input.autoAccept': 'Auto-accept changes',
@@ -33,34 +33,34 @@ export const en = {
     'preview.originalChars': 'Original:',
     'preview.modifiedChars': 'Modified:',
     'preview.chars': 'chars',
-    'preview.applyButton': 'apply changes',
-    'preview.rejectButton': 'reject',
+    'preview.applyButton': 'Apply changes',
+    'preview.rejectButton': 'Reject',
 
     // History Section
     'history.title': 'History',
     'history.clearButton': 'Clear',
 
     // Agent Section
-    'agent.planTitle': 'plan',
+    'agent.planTitle': 'Plan',
     'agent.activityTitle': 'Activity',
     'agent.noPlan': 'No plan created yet',
 
     // Todo Status
-    'todo.pending': 'pending',
-    'todo.inProgress': 'in progress',
-    'todo.completed': 'completed',
+    'todo.pending': 'Pending',
+    'todo.inProgress': 'In progress',
+    'todo.completed': 'Completed',
 
     // Interactive Prompt
     'interactive.header': 'Claude is asking for confirmation',
-    'interactive.yesButton': 'yes',
-    'interactive.noButton': 'no',
+    'interactive.yesButton': 'Yes',
+    'interactive.noButton': 'No',
     'interactive.customPlaceholder': 'Or type a custom response...',
 
     // Permission Approval
-    'permission.header': 'permission required',
+    'permission.header': 'Permission required',
     'permission.message': 'Claude is requesting permission to execute actions.',
-    'permission.approveButton': 'approve & continue',
-    'permission.denyButton': 'deny',
+    'permission.approveButton': 'Approve & continue',
+    'permission.denyButton': 'Deny',
 
     // Status Messages
     'status.processing': 'Claude is processing',
@@ -77,15 +77,15 @@ export const en = {
     'notice.noVaultPath': 'Could not determine vault path',
     'notice.completed': 'Claude Code completed',
     'notice.completedNoChanges': 'Claude Code completed (no file changes)',
-    'notice.changesApplied': 'changes applied automatically',
-    'notice.changesAppliedSuccess': 'changes applied successfully',
-    'notice.failedApplyChanges': 'failed to apply changes',
+    'notice.changesApplied': 'Changes applied automatically',
+    'notice.changesAppliedSuccess': 'Changes applied successfully',
+    'notice.failedApplyChanges': 'Failed to apply changes',
     'notice.changesRejected': 'Changes rejected',
     'notice.cancelled': 'Cancelled',
     'notice.permissionRequest': 'Claude is requesting permission - please approve or deny',
     'notice.permissionDenied': 'Permission denied - Claude will not proceed',
-    'notice.noChangesToApply': 'no changes to apply',
-    'notice.noActiveFile': 'no active file',
+    'notice.noChangesToApply': 'No changes to apply',
+    'notice.noActiveFile': 'No active file',
     'notice.historyRestored': 'History item restored',
     'notice.historyRestoredWithChanges': 'History item restored with proposed changes',
     'notice.historyCleared': 'History cleared',
@@ -96,7 +96,7 @@ export const en = {
 
     // Result Renderer
     'result.directAnswer': 'Direct answer',
-    'result.additionalContext': 'Additional Context',
+    'result.additionalContext': 'Additional context',
     'result.tokens': 'tokens',
     'result.tokensIn': 'in',
     'result.tokensOut': 'out',
@@ -119,8 +119,8 @@ export const en = {
     'settings.testInstallation': 'Test Claude Code installation',
     'settings.testInstallationDesc': 'Verify that Claude Code is accessible and working',
     'settings.testButton': 'Test',
-    'settings.testWorking': 'working!',
-    'settings.testFailed': 'failed',
+    'settings.testWorking': 'Working!',
+    'settings.testFailed': 'Failed',
     'settings.customPrompt': 'Custom system prompt',
     'settings.customPromptDesc': 'Optional custom system prompt to prepend to all requests',
     'settings.customPromptPlaceholder': 'You are helping edit markdown notes...',

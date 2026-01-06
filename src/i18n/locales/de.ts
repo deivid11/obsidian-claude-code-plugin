@@ -4,7 +4,7 @@
 export const de = {
     // Header
     'header.title': 'Claude Code Assistent',
-    'header.noNoteSelected': 'keine Notiz ausgewählt',
+    'header.noNoteSelected': 'Keine Notiz ausgewählt',
 
     // Input Section
     'input.label': 'Deine Anweisungen:',

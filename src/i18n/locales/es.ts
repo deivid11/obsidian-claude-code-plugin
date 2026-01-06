@@ -4,12 +4,12 @@
 export const es = {
     // Header
     'header.title': 'Asistente Claude Code',
-    'header.noNoteSelected': 'ninguna nota seleccionada',
+    'header.noNoteSelected': 'Ninguna nota seleccionada',
 
     // Input Section
     'input.label': 'Tus instrucciones:',
     'input.placeholder': 'ej., "Agregar más ejemplos a esta sección" o "Reorganizar con mejores encabezados" (Enter para enviar, Ctrl+Enter para nueva línea)',
-    'input.conversationalMode': 'modo conversacional (sin edición de archivos)',
+    'input.conversationalMode': 'Modo conversacional (sin edición de archivos)',
     'input.conversationalModeTooltip': 'Chatea con Claude sin modificar ningún archivo',
     'input.selectedTextOnly': 'Editar solo texto seleccionado',
     'input.autoAccept': 'Aceptar cambios automáticamente',
@@ -33,34 +33,34 @@ export const es = {
     'preview.originalChars': 'Original:',
     'preview.modifiedChars': 'Modificado:',
     'preview.chars': 'caracteres',
-    'preview.applyButton': 'aplicar cambios',
-    'preview.rejectButton': 'rechazar',
+    'preview.applyButton': 'Aplicar cambios',
+    'preview.rejectButton': 'Rechazar',
 
     // History Section
     'history.title': 'Historial',
     'history.clearButton': 'Limpiar',
 
     // Agent Section
-    'agent.planTitle': 'plan',
+    'agent.planTitle': 'Plan',
     'agent.activityTitle': 'Actividad',
     'agent.noPlan': 'Aún no se ha creado un plan',
 
     // Todo Status
-    'todo.pending': 'pendiente',
-    'todo.inProgress': 'en progreso',
-    'todo.completed': 'completado',
+    'todo.pending': 'Pendiente',
+    'todo.inProgress': 'En progreso',
+    'todo.completed': 'Completado',
 
     // Interactive Prompt
     'interactive.header': 'Claude está solicitando confirmación',
-    'interactive.yesButton': 'sí',
-    'interactive.noButton': 'no',
+    'interactive.yesButton': 'Sí',
+    'interactive.noButton': 'No',
     'interactive.customPlaceholder': 'O escribe una respuesta personalizada...',
 
     // Permission Approval
-    'permission.header': 'permiso requerido',
+    'permission.header': 'Permiso requerido',
     'permission.message': 'Claude está solicitando permiso para ejecutar acciones.',
-    'permission.approveButton': 'aprobar y continuar',
-    'permission.denyButton': 'denegar',
+    'permission.approveButton': 'Aprobar y continuar',
+    'permission.denyButton': 'Denegar',
 
     // Status Messages
     'status.processing': 'Claude está procesando',
@@ -77,15 +77,15 @@ export const es = {
     'notice.noVaultPath': 'No se pudo determinar la ruta de la bóveda',
     'notice.completed': 'Claude Code completado',
     'notice.completedNoChanges': 'Claude Code completado (sin cambios en archivos)',
-    'notice.changesApplied': 'cambios aplicados automáticamente',
-    'notice.changesAppliedSuccess': 'cambios aplicados exitosamente',
-    'notice.failedApplyChanges': 'falló al aplicar cambios',
+    'notice.changesApplied': 'Cambios aplicados automáticamente',
+    'notice.changesAppliedSuccess': 'Cambios aplicados exitosamente',
+    'notice.failedApplyChanges': 'Falló al aplicar cambios',
     'notice.changesRejected': 'Cambios rechazados',
     'notice.cancelled': 'Cancelado',
     'notice.permissionRequest': 'Claude está solicitando permiso - por favor aprueba o deniega',
     'notice.permissionDenied': 'Permiso denegado - Claude no procederá',
-    'notice.noChangesToApply': 'no hay cambios para aplicar',
-    'notice.noActiveFile': 'no hay archivo activo',
+    'notice.noChangesToApply': 'No hay cambios para aplicar',
+    'notice.noActiveFile': 'No hay archivo activo',
     'notice.historyRestored': 'Elemento del historial restaurado',
     'notice.historyRestoredWithChanges': 'Elemento del historial restaurado con cambios propuestos',
     'notice.historyCleared': 'Historial limpiado',
@@ -119,8 +119,8 @@ export const es = {
     'settings.testInstallation': 'Probar instalación de Claude Code',
     'settings.testInstallationDesc': 'Verificar que Claude Code sea accesible y funcione',
     'settings.testButton': 'Probar',
-    'settings.testWorking': '¡funcionando!',
-    'settings.testFailed': 'falló',
+    'settings.testWorking': '¡Funcionando!',
+    'settings.testFailed': 'Falló',
     'settings.customPrompt': 'Prompt de sistema personalizado',
     'settings.customPromptDesc': 'Prompt de sistema personalizado opcional para agregar a todas las solicitudes',
     'settings.customPromptPlaceholder': 'Estás ayudando a editar notas markdown...',
