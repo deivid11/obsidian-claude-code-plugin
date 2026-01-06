@@ -125,7 +125,12 @@ export class StreamEventProcessor {
         // Extract text content from assistant message
         if (event.message?.content) {
             for (const block of event.message.content) {
-                if (block.type === 'text' && block.text) {
+                if (block.type === 'thinking' && block.text) {
+                    // Send thinking/reasoning content with special marker
+                    sendOutput(`\n🧠 **Reasoning:**\n`, false, false);
+                    sendOutput(block.text, true, false, true);
+                    sendOutput(`\n---\n`, false, false);
+                } else if (block.type === 'text' && block.text) {
                     // Send assistant text as markdown for rendering
                     // Mark as assistant message so it can be shown in Result section
                     sendOutput(block.text, true, false, true);
@@ -231,10 +236,17 @@ export class StreamEventProcessor {
                 // Also mark as assistant message for Result section
                 console.debug('[Stream Processor] Sending text delta as assistant message');
                 sendOutput(streamEvent.delta.text, false, true, true);
+            } else if (streamEvent.delta?.type === 'thinking_delta' && streamEvent.delta.text) {
+                // Stream thinking/reasoning content
+                console.debug('[Stream Processor] Sending thinking delta as assistant message');
+                sendOutput(streamEvent.delta.text, false, true, true);
             }
         } else if (streamEvent.type === 'content_block_start') {
-            // Start of new content block (text or tool use)
-            if (streamEvent.content_block?.type === 'text') {
+            // Start of new content block (text, thinking, or tool use)
+            if (streamEvent.content_block?.type === 'thinking') {
+                // Thinking/reasoning block starting
+                sendOutput(`\n🧠 **Reasoning:**\n`, false, false);
+            } else if (streamEvent.content_block?.type === 'text') {
                 // Text block starting
                 sendOutput(`\n💬 Claude: `, false, false);
             }

@@ -36,10 +36,12 @@ export class ClaudeCodeView extends ItemView {
     private outputSection: HTMLDivElement;
     private resultArea: HTMLDivElement;
     private lastPromptArea: HTMLDivElement;
+    private toolHistoryArea: HTMLDivElement;
     private currentResultStreamingElement: HTMLElement | null = null;
     private hitFinalContentMarker: boolean = false;
     private userHasScrolled: boolean = false;
     private lastRenderedText: string = ''; // Track what we've already rendered
+    private resultBlockCount: number = 0; // Track number of result blocks for collapsing earlier ones
     private previewArea: HTMLDivElement;
     private previewContentContainer: HTMLDivElement;
     private selectedTextOnlyCheckbox: HTMLInputElement;
@@ -63,6 +65,9 @@ export class ClaudeCodeView extends ItemView {
     // Tool timing tracking
     private toolStartTimes: Map<string, number> = new Map();
     private lastToolKey: string | null = null;
+
+    // Tool history tracking (for displaying icons in Result section)
+    private toolUsageHistory: Array<{ name: string; count: number }> = [];
 
     // Execution timing tracking (interval is view-level, but start time is per-note in context)
     private elapsedTimeInterval: NodeJS.Timeout | null = null;
@@ -204,6 +209,7 @@ export class ClaudeCodeView extends ItemView {
         this.statusIndicator = resultElements.statusArea;
         this.statusText = resultElements.statusText;
         this.lastPromptArea = resultElements.lastPromptArea;
+        this.toolHistoryArea = resultElements.toolHistoryArea;
 
         // Setup smart auto-scroll detection
         this.setupSmartAutoScroll();
@@ -506,7 +512,10 @@ export class ClaudeCodeView extends ItemView {
             this.resultArea.addClass('claude-code-hidden');
             this.currentResultStreamingElement = null;
             this.hitFinalContentMarker = false;
+            this.resultBlockCount = 0;  // Reset block counter
             context.currentResultText = undefined;  // Clear per-note result text
+            this.toolUsageHistory = [];  // Clear tool history for new run
+            this.clearToolHistoryDisplay();  // Clear tool history UI
 
             // Show the last prompt and status together (keeps prompt visible during processing)
             this.showLastPrompt(prompt);
@@ -615,7 +624,8 @@ export class ClaudeCodeView extends ItemView {
                             this.showResult(response.assistantMessage);
                             new Notice('✓ ' + t('notice.completed'));
                         } else if (hasStreamedContent) {
-                            // Result was already streamed, just show notice
+                            // Result was already streamed - make earlier blocks collapsible
+                            this.makeEarlierBlocksCollapsible();
                             new Notice('✓ ' + t('notice.completed'));
                         } else {
                             new Notice('✓ ' + t('notice.completedNoChanges'));
@@ -722,6 +732,9 @@ export class ClaudeCodeView extends ItemView {
                     this.toolStartTimes.set(agentStep.key, now);
                     this.lastToolKey = agentStep.key;
                     agentStep.startTime = now;
+
+                    // Track tool usage for history display
+                    this.trackToolUsage(agentStep.action);
                 }
                 // Detect if this is a tool completion
                 else if (this.isToolComplete(text)) {
@@ -773,6 +786,90 @@ export class ClaudeCodeView extends ItemView {
                text.includes('✓ Output') ||          // Bash output
                text.includes('complete') ||          // Generic completion
                text.includes('📥 Tool result');      // Tool result event
+    }
+
+    /**
+     * Tool icon mapping for display
+     */
+    private static readonly TOOL_ICONS: Record<string, { icon: string; description: string }> = {
+        'Read': { icon: '📖', description: 'Read file contents' },
+        'Write': { icon: '✍️', description: 'Write file contents' },
+        'Edit': { icon: '✏️', description: 'Edit file contents' },
+        'Bash': { icon: '💻', description: 'Execute shell command' },
+        'Glob': { icon: '🔍', description: 'Search files by pattern' },
+        'Grep': { icon: '🔎', description: 'Search file contents' },
+        'WebFetch': { icon: '🌐', description: 'Fetch web content' },
+        'WebSearch': { icon: '🔎', description: 'Search the web' },
+        'Task': { icon: '🤖', description: 'Launch sub-agent' },
+        'TodoWrite': { icon: '📋', description: 'Update task list' },
+        'AskUserQuestion': { icon: '❓', description: 'Ask user a question' },
+        'NotebookEdit': { icon: '📓', description: 'Edit Jupyter notebook' },
+        'default': { icon: '🔧', description: 'Tool execution' }
+    };
+
+    /**
+     * Track tool usage in history
+     */
+    private trackToolUsage(toolName: string): void {
+        // Check if tool already exists in history
+        const existing = this.toolUsageHistory.find(t => t.name === toolName);
+        if (existing) {
+            existing.count++;
+        } else {
+            this.toolUsageHistory.push({ name: toolName, count: 1 });
+        }
+
+        // Update the display
+        this.updateToolHistoryDisplay();
+    }
+
+    /**
+     * Clear tool history display
+     */
+    private clearToolHistoryDisplay(): void {
+        if (this.toolHistoryArea) {
+            this.toolHistoryArea.empty();
+            this.toolHistoryArea.addClass('claude-code-hidden');
+        }
+    }
+
+    /**
+     * Update tool history display with current tools
+     */
+    private updateToolHistoryDisplay(): void {
+        if (!this.toolHistoryArea || this.toolUsageHistory.length === 0) {
+            return;
+        }
+
+        // Clear and rebuild
+        this.toolHistoryArea.empty();
+        this.toolHistoryArea.removeClass('claude-code-hidden');
+
+        // Add label
+        this.toolHistoryArea.createEl('span', {
+            cls: 'claude-code-tool-history-label',
+            text: '🛠️ '
+        });
+
+        // Add tool icons
+        for (const tool of this.toolUsageHistory) {
+            const toolInfo = ClaudeCodeView.TOOL_ICONS[tool.name] || ClaudeCodeView.TOOL_ICONS['default'];
+            const toolEl = this.toolHistoryArea.createEl('span', {
+                cls: 'claude-code-tool-icon',
+                text: toolInfo.icon
+            });
+
+            // Add count badge if more than 1
+            if (tool.count > 1) {
+                toolEl.createEl('span', {
+                    cls: 'claude-code-tool-count',
+                    text: String(tool.count)
+                });
+            }
+
+            // Set tooltip with tool name and description
+            toolEl.setAttribute('title', `${tool.name}: ${toolInfo.description}${tool.count > 1 ? ` (×${tool.count})` : ''}`);
+        }
     }
 
     /**
@@ -864,12 +961,17 @@ export class ClaudeCodeView extends ItemView {
             resultSection.addClass('claude-code-visible');
         }
 
-        // Show status area, hide result area
+        // Show status area
         this.statusIndicator.removeClass('claude-code-hidden');
         this.statusIndicator.addClass('claude-code-flex-visible');
-        this.resultArea.addClass('claude-code-hidden');
-        this.resultArea.removeClass('claude-code-visible');
         this.statusText.textContent = message;
+
+        // Keep result area visible if it has content (reasoning steps)
+        // Only hide if there's no content yet
+        if (this.resultArea.children.length === 0) {
+            this.resultArea.addClass('claude-code-hidden');
+            this.resultArea.removeClass('claude-code-visible');
+        }
     }
 
     /**
@@ -1496,12 +1598,12 @@ export class ClaudeCodeView extends ItemView {
         if (this.currentResultStreamingElement) {
             console.debug('[Finish Result Streaming] Cleaning up streaming state');
 
-            // Get the full accumulated text
-            const fullAccumulatedText = (this.currentResultStreamingElement as unknown as StreamingElementData).fullText || '';
+            // Get the accumulated text from the streaming element
+            const accumulatedText = (this.currentResultStreamingElement as unknown as StreamingElementData).accumulatedText || '';
 
             // Check if there's any text we haven't rendered yet
-            if (fullAccumulatedText && fullAccumulatedText.length > this.lastRenderedText.length) {
-                const unrenderedText = fullAccumulatedText.substring(this.lastRenderedText.length);
+            if (accumulatedText && accumulatedText.length > this.lastRenderedText.length) {
+                const unrenderedText = accumulatedText.substring(this.lastRenderedText.length);
                 if (unrenderedText.trim()) {
                     console.debug('[Finish Result Streaming] Rendering final unrendered text:', unrenderedText.substring(0, 50));
                     // Remove any plain text node
@@ -1529,9 +1631,65 @@ export class ClaudeCodeView extends ItemView {
             // Just update the CSS class - content is already rendered as markdown
             this.currentResultStreamingElement.removeClass('claude-code-result-streaming');
             this.currentResultStreamingElement.addClass('markdown-rendered');
+            this.currentResultStreamingElement.addClass('claude-code-result-block');
+            this.currentResultStreamingElement.setAttribute('data-block-index', String(this.resultBlockCount));
 
-            // Clear the streaming element reference
+            // Add a divider after this block (will separate from next content block)
+            const divider = document.createElement('hr');
+            divider.addClass('claude-code-block-divider');
+            this.resultArea.appendChild(divider);
+
+            // Increment block counter
+            this.resultBlockCount++;
+
+            // Clear the streaming element reference (keep content in DOM)
             this.currentResultStreamingElement = null;
+        }
+        // Reset rendering state for next block
+        this.lastRenderedText = '';
+    }
+
+    /**
+     * Make earlier result blocks collapsible (called at end of run)
+     */
+    private makeEarlierBlocksCollapsible(): void {
+        if (this.resultBlockCount <= 1) return; // Only one block, nothing to collapse
+
+        const blocks = this.resultArea.querySelectorAll('.claude-code-result-block');
+        blocks.forEach((block, index) => {
+            // Make all blocks except the last one collapsible
+            if (index < blocks.length - 1) {
+                this.wrapInCollapsible(block as HTMLElement, `Reasoning step ${index + 1}`);
+            }
+        });
+
+        // Remove dividers that are now inside collapsibles or at the end
+        const dividers = this.resultArea.querySelectorAll('.claude-code-block-divider');
+        dividers.forEach((divider, index) => {
+            // Keep only the divider before the last block
+            if (index < dividers.length - 1) {
+                divider.remove();
+            }
+        });
+    }
+
+    /**
+     * Wrap an element in a collapsible details container
+     */
+    private wrapInCollapsible(element: HTMLElement, summary: string): void {
+        const details = document.createElement('details');
+        details.addClass('claude-code-collapsible-block');
+
+        const summaryEl = document.createElement('summary');
+        summaryEl.addClass('claude-code-collapsible-summary');
+        summaryEl.textContent = summary;
+
+        // Move the element into the details
+        const parent = element.parentNode;
+        if (parent) {
+            parent.insertBefore(details, element);
+            details.appendChild(summaryEl);
+            details.appendChild(element);
         }
     }
 

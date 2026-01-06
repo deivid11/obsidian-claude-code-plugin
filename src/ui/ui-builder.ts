@@ -287,7 +287,7 @@ export class UIBuilder {
     /**
      * Build the result section (for non-edit responses)
      */
-    static buildResultSection(container: HTMLElement): { resultArea: HTMLDivElement; statusArea: HTMLDivElement; statusText: HTMLSpanElement; lastPromptArea: HTMLDivElement } {
+    static buildResultSection(container: HTMLElement): { resultArea: HTMLDivElement; statusArea: HTMLDivElement; statusText: HTMLSpanElement; lastPromptArea: HTMLDivElement; toolHistoryArea: HTMLDivElement } {
         const resultSection = container.createEl('div', { cls: 'claude-code-result-section claude-code-hidden' });
         resultSection.id = 'claude-code-result-section';
 
@@ -301,6 +301,10 @@ export class UIBuilder {
         // Last prompt area (shows what the user asked)
         const lastPromptArea = contentWrapper.createEl('div', { cls: 'claude-code-last-prompt claude-code-hidden' });
         lastPromptArea.id = 'claude-code-last-prompt';
+
+        // Tool history area (shows icons of tools used during the run)
+        const toolHistoryArea = contentWrapper.createEl('div', { cls: 'claude-code-tool-history claude-code-hidden' });
+        toolHistoryArea.id = 'claude-code-tool-history';
 
         // Status area (shown during processing)
         const statusArea = contentWrapper.createEl('div', { cls: 'claude-code-status-area claude-code-hidden' });
@@ -329,7 +333,7 @@ export class UIBuilder {
             resultSection.toggleClass('collapsed', !isCollapsed);
         });
 
-        return { resultArea, statusArea, statusText, lastPromptArea };
+        return { resultArea, statusArea, statusText, lastPromptArea, toolHistoryArea };
     }
 
     /**
