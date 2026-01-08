@@ -4,6 +4,8 @@ Integrate Claude Code AI assistant directly into Obsidian for intelligent note e
 
 ![Demo](docs/demo-obsidian-claude-code.png)
 
+![Demo Video](docs/demo-video.gif)
+
 
 ## Features
 
