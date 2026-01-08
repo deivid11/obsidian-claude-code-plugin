@@ -37,14 +37,17 @@ Integrate Claude Code AI assistant directly into Obsidian for intelligent note e
 
 ## Installation
 
-### From Obsidian Community Plugins (Recommended)
+### From Obsidian Community Plugins (Coming Soon)
+The plugin is currently under Obsidian validation and not yet available in the Community Plugins browser. You can track the approval progress here: [PR #8730](https://github.com/obsidianmd/obsidian-releases/pull/8730).
+
+Once approved, you will be able to:
 1. Open Obsidian Settings
 2. Navigate to Community Plugins
 3. Click "Browse" and search for "Claude Code Integration"
 4. Click "Install"
 5. Enable the plugin
 
-### Manual Installation
+### Manual Installation (Recommended)
 1. Download the latest release from [GitHub Releases](https://github.com/deivid11/obsidian-claude-code-plugin/releases)
 2. Create a folder: `.obsidian/plugins/claude-code-integration/` in your vault
 3. Extract `main.js`, `manifest.json`, and `styles.css` to that folder
