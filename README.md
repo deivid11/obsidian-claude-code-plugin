@@ -1,8 +1,10 @@
-# Claude Code Integration for Obsidian
+# Claude Code Plugin for Obsidian - AI Writing & Editing Assistant
 
-Integrate Claude Code AI assistant directly into Obsidian for intelligent note editing, analysis, and automation. This plugin brings the power of Anthropic's Claude AI with full tool support right into your note-taking workflow.
+An Obsidian plugin that brings Anthropic's Claude Code AI directly into your vault. Edit notes intelligently, analyze content, generate text, create diagrams, and automate repetitive tasks - all from within Obsidian. Supports Claude Sonnet, Opus, and Haiku models with full tool capabilities including file operations, web search, and bash commands.
 
 ![Demo](docs/demo-obsidian-claude-code.png)
+
+![Demo Video](docs/demo-video.gif)
 
 
 ## Features
