@@ -6,48 +6,6 @@ An Obsidian plugin that brings AI coding assistants directly into your vault. Ed
 
 ![Demo Video](docs/demo-video.gif)
 
-
-## Features
-
-### 🤖 AI-Powered Note Editing
-- **Direct Integration**: Run AI assistant commands directly from within Obsidian
-- **Multiple Backends**: Choose between **Claude Code** or **OpenCode** as your AI backend
-- **Context-Aware**: The AI understands your note content and vault structure
-- **Streaming Responses**: See responses in real-time as they're generated
-- **File Modifications**: AI can read, edit, and create files with your permission
-
-### 📊 Rich UI Experience
-- **Tabbed Interface**: Switch between Assistant (note-focused) and Sessions (global) views
-- **Real-Time Streaming**: Watch responses appear as they're generated
-- **Task Tracking**: Visual todo list shows the AI's plan and progress
-- **Preview Changes**: Review modifications before applying them to your notes
-- **Activity Monitoring**: See exactly what tools are being used with timing
-
-### 📁 Session Management
-- **Global Sessions View**: See all sessions across your vault in one place
-- **Per-Note Sessions**: Each note maintains its own conversation history
-- **Live Running Indicators**: See which sessions are currently running with real-time elapsed time
-- **Smart Linking**: Sessions stay linked to notes even when renamed or moved
-- **Session History**: Browse and restore previous interactions
-- **One-Click Navigation**: Click any session to open the linked note
-
-### 🎛️ Flexible Control
-- **Backend Selection**: Choose between Claude Code or OpenCode globally
-- **Permission Modes**:
-  - **Interactive Mode**: AI asks for permission before making changes
-  - **Permissionless Mode**: AI operates autonomously for trusted operations
-- **Model Selection**: Choose between different models (Sonnet, Opus, Haiku for Claude; custom models for OpenCode)
-- **Vault Access**: Optionally allow AI to read/write files across your entire vault
-- **Custom System Prompts**: Configure AI behavior with your own instructions
-
-### 🔧 Advanced Capabilities
-- **Tool Usage**: AI can use Bash, file operations, web search, and more
-- **Session Resumption**: Continue previous conversations across plugin restarts
-- **Selected Text Editing**: Work on specific sections of your notes
-- **Auto-Apply Changes**: Optionally apply edits automatically
-- **Markdown Rendering**: Beautiful rendering of AI responses
-- **Conversational Mode**: Chat without modifying files
-
 ## Installation
 
 **New to AI tools?** Check out our [Beginner's Guide](docs/BEGINNERS_GUIDE.md) for step-by-step instructions with no technical experience required!
@@ -119,6 +77,47 @@ OpenCode is an alternative AI coding assistant that supports multiple providers.
 **Configuration for OpenCode:**
 
 OpenCode supports multiple AI providers. Configure your preferred provider in OpenCode's settings. The model format is `provider/model` (e.g., `openai/gpt-4o`, `anthropic/claude-sonnet`).
+
+## Features
+
+### 🤖 AI-Powered Note Editing
+- **Direct Integration**: Run AI assistant commands directly from within Obsidian
+- **Multiple Backends**: Choose between **Claude Code** or **OpenCode** as your AI backend
+- **Context-Aware**: The AI understands your note content and vault structure
+- **Streaming Responses**: See responses in real-time as they're generated
+- **File Modifications**: AI can read, edit, and create files with your permission
+
+### 📊 Rich UI Experience
+- **Tabbed Interface**: Switch between Assistant (note-focused) and Sessions (global) views
+- **Real-Time Streaming**: Watch responses appear as they're generated
+- **Task Tracking**: Visual todo list shows the AI's plan and progress
+- **Preview Changes**: Review modifications before applying them to your notes
+- **Activity Monitoring**: See exactly what tools are being used with timing
+
+### 📁 Session Management
+- **Global Sessions View**: See all sessions across your vault in one place
+- **Per-Note Sessions**: Each note maintains its own conversation history
+- **Live Running Indicators**: See which sessions are currently running with real-time elapsed time
+- **Smart Linking**: Sessions stay linked to notes even when renamed or moved
+- **Session History**: Browse and restore previous interactions
+- **One-Click Navigation**: Click any session to open the linked note
+
+### 🎛️ Flexible Control
+- **Backend Selection**: Choose between Claude Code or OpenCode globally
+- **Permission Modes**:
+  - **Interactive Mode**: AI asks for permission before making changes
+  - **Permissionless Mode**: AI operates autonomously for trusted operations
+- **Model Selection**: Choose between different models (Sonnet, Opus, Haiku for Claude; custom models for OpenCode)
+- **Vault Access**: Optionally allow AI to read/write files across your entire vault
+- **Custom System Prompts**: Configure AI behavior with your own instructions
+
+### 🔧 Advanced Capabilities
+- **Tool Usage**: AI can use Bash, file operations, web search, and more
+- **Session Resumption**: Continue previous conversations across plugin restarts
+- **Selected Text Editing**: Work on specific sections of your notes
+- **Auto-Apply Changes**: Optionally apply edits automatically
+- **Markdown Rendering**: Beautiful rendering of AI responses
+- **Conversational Mode**: Chat without modifying files
 
 ## Configuration
 
