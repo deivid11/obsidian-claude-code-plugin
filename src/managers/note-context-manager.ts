@@ -30,6 +30,17 @@ export class NoteContextManager {
     }
 
     /**
+     * Update settings for all contexts and their runners
+     */
+    updateSettings(settings: ClaudeCodeSettings): void {
+        this.settings = settings;
+        // Update all existing runners with new settings
+        for (const context of this.contexts.values()) {
+            context.runner.updateSettings(settings);
+        }
+    }
+
+    /**
      * Get or create context for a note
      */
     getContext(notePath: string): NoteContext {

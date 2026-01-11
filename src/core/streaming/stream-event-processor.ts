@@ -138,8 +138,9 @@ export class StreamEventProcessor {
                     // Display detailed tool usage from assistant message
                     const toolName = block.name;
                     const toolInput = block.input || {};
+                    const toolIcon = ToolOutputFormatter.getToolIcon(toolName);
 
-                    sendOutput(`\n🔧 Using tool: ${toolName}\n`);
+                    sendOutput(`\n${toolIcon} Using tool: ${toolName}\n`);
 
                     // Use formatter for tool-specific parameters
                     const formatted = ToolOutputFormatter.formatToolUsage(toolName, toolInput, 'compact');

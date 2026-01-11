@@ -2,7 +2,7 @@
 # =======================================
 
 # Default plugin destination (customize this for your setup)
-PLUGIN_DIR ?= /Users/riven/Documents/Obsidian Vault/Default/.obsidian/plugins/claude-code-integration
+PLUGIN_DIR ?= /home/riven/obsidian/Default/.obsidian/plugins/claude-code-integration
 
 .PHONY: help
 help: ## Show this help message
@@ -98,7 +98,7 @@ release: ## Build and upload a new release (auto-increments patch version). Use 
 	NEW_PATCH=$$((PATCH + 1)); \
 	NEW_VERSION="$$MAJOR.$$MINOR.$$NEW_PATCH"; \
 	echo "Bumping version: $$CURRENT_VERSION -> $$NEW_VERSION"; \
-	sed -i '' "s/\"version\": \"$$CURRENT_VERSION\"/\"version\": \"$$NEW_VERSION\"/" manifest.json; \
+	sed -i "s/\"version\": \"$$CURRENT_VERSION\"/\"version\": \"$$NEW_VERSION\"/" manifest.json; \
 	echo "Building plugin..."; \
 	npm run build; \
 	echo "Creating zip archive..."; \

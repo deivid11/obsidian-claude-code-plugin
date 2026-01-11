@@ -2,12 +2,14 @@
  * Claude Code View - Refactored to use modular components
  */
 
-import { ItemView, WorkspaceLeaf, MarkdownView, Notice, MarkdownRenderer, Editor, FileSystemAdapter } from 'obsidian';
+import { ItemView, WorkspaceLeaf, MarkdownView, Notice, MarkdownRenderer, Editor, FileSystemAdapter, TFile } from 'obsidian';
 import ClaudeCodePlugin from '../main';
 import { ClaudeCodeRequest } from '../core/claude-code-runner';
 import { VIEW_TYPE_CLAUDE_CODE, SessionHistoryItem, NoteContext } from '../core/types';
 import { UIBuilder } from './ui-builder';
 import { t } from '../i18n';
+import { getBackendDisplayName } from '../core/backends';
+import { SessionManager } from '../core/session-manager';
 
 /** Interface for streaming element with accumulated text */
 interface StreamingElementData {
@@ -53,6 +55,7 @@ export class ClaudeCodeView extends ItemView {
     private statusText: HTMLSpanElement;
     private permissionApprovalSection: HTMLElement;
     private historyList: HTMLUListElement;
+    private sessionsSection: HTMLDivElement;
 
     // Managers and Renderers
     private contextManager: NoteContextManager;
@@ -61,6 +64,7 @@ export class ClaudeCodeView extends ItemView {
 
     // State
     private currentNotePath: string = '';
+    private currentBackend: string = '';
 
     // Tool timing tracking
     private toolStartTimes: Map<string, number> = new Map();
@@ -79,6 +83,13 @@ export class ClaudeCodeView extends ItemView {
         handler: EventListener;
     }> = [];
     private promptInputKeydownHandler: ((e: KeyboardEvent) => void) | null = null;
+
+    // Tab state
+    private currentTab: string = 'assistant';
+    private sessionsRefreshInterval: NodeJS.Timeout | null = null;
+
+    // Standalone session state
+    private activeStandaloneSession: string | null = null;
 
     constructor(leaf: WorkspaceLeaf, plugin: ClaudeCodePlugin) {
         super(leaf);
@@ -104,11 +115,18 @@ export class ClaudeCodeView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Claude Code';
+        return getBackendDisplayName(this.plugin.settings.backend);
     }
 
     getIcon(): string {
         return 'bot';
+    }
+
+    /**
+     * Get the display name for the current backend
+     */
+    private getBackendName(): string {
+        return getBackendDisplayName(this.plugin.settings.backend);
     }
 
     async onOpen(): Promise<void> {
@@ -128,6 +146,9 @@ export class ClaudeCodeView extends ItemView {
             this.currentNotePath = activeFile.path;
         }
 
+        // Track current backend for detecting changes
+        this.currentBackend = this.plugin.settings.backend;
+
         // Build UI using modular components
         this.buildUI(container);
 
@@ -144,16 +165,53 @@ export class ClaudeCodeView extends ItemView {
      * Build the entire UI using modular components
      */
     private buildUI(container: HTMLElement): void {
+        const backendName = this.getBackendName();
+
         // Header
-        this.currentNoteLabel = UIBuilder.buildHeader(container);
+        this.currentNoteLabel = UIBuilder.buildHeader(container, backendName, () => this.openPluginSettings());
         this.updateCurrentNoteLabel();
+
+        // Tab navigation
+        const tabBar = container.createEl('div', { cls: 'claude-code-tab-bar' });
+        const assistantTab = tabBar.createEl('button', {
+            cls: 'claude-code-tab active',
+            text: '💬 ' + t('tabs.assistant')
+        });
+        assistantTab.dataset.tab = 'assistant';
+        const sessionsTab = tabBar.createEl('button', {
+            cls: 'claude-code-tab',
+            text: '📁 ' + t('tabs.sessions')
+        });
+        sessionsTab.dataset.tab = 'sessions';
+
+        // Tab content containers
+        const tabContent = container.createEl('div', { cls: 'claude-code-tab-content' });
+
+        // Assistant tab content (note-centric)
+        const assistantContent = tabContent.createEl('div', {
+            cls: 'claude-code-tab-pane active',
+            attr: { 'data-tab': 'assistant' }
+        });
+
+        // Sessions tab content (global)
+        const sessionsContent = tabContent.createEl('div', {
+            cls: 'claude-code-tab-pane',
+            attr: { 'data-tab': 'sessions' }
+        });
+
+        // Tab click handlers
+        assistantTab.addEventListener('click', () => this.switchTab('assistant'));
+        sessionsTab.addEventListener('click', () => this.switchTab('sessions'));
+
+        // === Build Assistant Tab Content ===
 
         // Input section
         const inputElements = UIBuilder.buildInputSection(
-            container,
+            assistantContent,
             this.plugin.settings.autoAcceptChanges,
             () => void this.handleRunClaudeCode(),
-            () => this.handleCancel()
+            () => this.handleCancel(),
+            backendName
         );
         this.promptInput = inputElements.promptInput;
         this.selectedTextOnlyCheckbox = inputElements.selectedTextOnlyCheckbox;
@@ -199,12 +257,13 @@ export class ClaudeCodeView extends ItemView {
 
         // Interactive prompt section
          UIBuilder.buildInteractivePromptSection(
-            container,
-            (response) => this.respondToPrompt(response)
+            assistantContent,
+            (response) => this.respondToPrompt(response),
+            backendName
         );
 
         // Result section (first) - includes status indicator
-        const resultElements = UIBuilder.buildResultSection(container);
+        const resultElements = UIBuilder.buildResultSection(assistantContent);
         this.resultArea = resultElements.resultArea;
         this.statusIndicator = resultElements.statusArea;
         this.statusText = resultElements.statusText;
@@ -216,15 +275,16 @@ export class ClaudeCodeView extends ItemView {
 
         // Permission approval section (after result)
         const permissionElements = UIBuilder.buildPermissionApprovalSection(
-            container,
+            assistantContent,
             () => void this.handleApprovePermission(),
-            () => this.handleDenyPermission()
+            () => this.handleDenyPermission(),
+            backendName
         );
         this.permissionApprovalSection = permissionElements.permissionApprovalSection;
 
         // Preview section (second - after result)
         const previewElements = UIBuilder.buildPreviewSection(
-            container,
+            assistantContent,
             () => this.handleApplyChanges(),
             () => this.handleRejectChanges()
         );
@@ -232,35 +292,120 @@ export class ClaudeCodeView extends ItemView {
         this.previewContentContainer = previewElements.previewContentContainer;
 
         // Combined agent section (plan + activity) (third)
-        UIBuilder.buildAgentSection(container);
+        UIBuilder.buildAgentSection(assistantContent);
 
         // Initialize agent tracker with the activity column
-        const activityColumn = container.querySelector('.claude-code-activity-column');
+        const activityColumn = assistantContent.querySelector('.claude-code-activity-column');
         if (activityColumn) {
             this.agentTracker.initialize(activityColumn as HTMLElement);
         }
 
         // Output section (fourth)
-        const outputSectionResult = UIBuilder.buildOutputSection(container);
+        const outputSectionResult = UIBuilder.buildOutputSection(assistantContent);
         this.outputArea = outputSectionResult.outputArea;
         this.outputSection = outputSectionResult.outputSection;
 
         // History section (fifth)
         this.historyList = UIBuilder.buildHistorySection(
-            container,
+            assistantContent,
             () => this.clearHistory()
         );
+
+        // === Build Sessions Tab Content ===
+        this.sessionsSection = UIBuilder.buildSessionsSection(
+            sessionsContent,
+            () => this.createNewSession(),
+            (sessionDir) => this.openSession(sessionDir),
+            (sessionDir) => this.deleteSession(sessionDir),
+            (notePath) => void this.openNoteByPath(notePath)
+        );
+
+        // Load and display sessions
+        this.refreshSessionsList();
+    }
+
+    /**
+     * Switch between tabs
+     */
+    private switchTab(tabName: string): void {
+        this.currentTab = tabName;
+
+        // Update tab buttons
+        const tabs = this.containerEl.querySelectorAll('.claude-code-tab');
+        tabs.forEach(tab => {
+            tab.removeClass('active');
+            if ((tab as HTMLElement).dataset.tab === tabName) {
+                tab.addClass('active');
+            }
+        });
+
+        // Update tab panes
+        const panes = this.containerEl.querySelectorAll('.claude-code-tab-pane');
+        panes.forEach(pane => {
+            pane.removeClass('active');
+            if ((pane as HTMLElement).dataset.tab === tabName) {
+                pane.addClass('active');
+            }
+        });
+
+        // Manage sessions tab refresh interval
+        if (tabName === 'sessions') {
+            this.refreshSessionsList();
+            this.startSessionsAutoRefresh();
+        } else {
+            this.stopSessionsAutoRefresh();
+        }
+    }
+
+    /**
+     * Start auto-refresh interval for sessions tab (to update running states)
+     */
+    private startSessionsAutoRefresh(): void {
+        this.stopSessionsAutoRefresh(); // Clear any existing interval
+
+        // Check every 2 seconds if there are running sessions
+        this.sessionsRefreshInterval = setInterval(() => {
+            const runningPaths = this.contextManager.getRunningNotePaths();
+            if (runningPaths.length > 0 || this.currentTab === 'sessions') {
+                // Only refresh if we're still on sessions tab
+                if (this.currentTab === 'sessions') {
+                    this.refreshSessionsList();
+                }
+            } else {
+                // No running sessions, stop refreshing
+                this.stopSessionsAutoRefresh();
+            }
+        }, 2000);
+    }
+
+    /**
+     * Stop auto-refresh interval for sessions tab
+     */
+    private stopSessionsAutoRefresh(): void {
+        if (this.sessionsRefreshInterval) {
+            clearInterval(this.sessionsRefreshInterval);
+            this.sessionsRefreshInterval = null;
+        }
     }
 
     /**
      * Update the current note label
      */
     private updateCurrentNoteLabel(): void {
-        if (this.currentNotePath) {
+        // Check if this is a standalone session (path starts with 'standalone:')
+        const isStandalone = this.currentNotePath.startsWith('standalone:');
+
+        if (this.currentNotePath && !isStandalone) {
+            // Regular note-based session
             const fileName = this.currentNotePath.split('/').pop() || 'Unknown';
             const context = this.contextManager.getContext(this.currentNotePath);
             const runningIndicator = context.isRunning ? ' 🔄' : '';
             this.currentNoteLabel.textContent = `📝 ${fileName}${runningIndicator}`;
+        } else if (isStandalone || this.activeStandaloneSession) {
+            // Standalone session mode - show (No note) as requested
+            const context = this.contextManager.getContext(this.currentNotePath);
+            const runningIndicator = context.isRunning ? ' 🔄' : '';
+            this.currentNoteLabel.textContent = '📝 ' + t('header.noNoteSelected') + runningIndicator;
         } else {
             this.currentNoteLabel.textContent = '📝 ' + t('header.noNoteSelected');
         }
@@ -299,7 +444,32 @@ export class ClaudeCodeView extends ItemView {
      */
     private onActiveNoteChange(): void {
         const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile && activeFile.path !== this.currentNotePath) {
+
+        // In standalone mode, preserve it unless user explicitly clicks on a different markdown file
+        if (this.activeStandaloneSession) {
+            // Only exit standalone mode if user opens a DIFFERENT file (not just clicking around)
+            // AND the active leaf is actually focused on a markdown view
+            const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+            const isMarkdownLeafActive = activeView !== null;
+
+            // Only switch if:
+            // 1. A markdown file is actively focused (not just the sidebar)
+            // 2. The file is different from any previous file
+            // 3. We're not in the same view we started from
+            if (isMarkdownLeafActive && activeFile) {
+                this.activeStandaloneSession = null;
+                this.currentNotePath = activeFile.path;
+                this.updateCurrentNoteLabel();
+                this.loadNoteContext(this.currentNotePath);
+            }
+            // Otherwise, stay in standalone mode
+            return;
+        }
+
+        // Normal mode - switch to the active file if different
+        // Also handle case where currentNotePath might have standalone prefix
+        const currentRealPath = this.currentNotePath.startsWith('standalone:') ? '' : this.currentNotePath;
+        if (activeFile && activeFile.path !== currentRealPath) {
             this.currentNotePath = activeFile.path;
             this.updateCurrentNoteLabel();
             this.loadNoteContext(this.currentNotePath);
@@ -364,7 +534,7 @@ export class ClaudeCodeView extends ItemView {
             this.cancelButton.addClass('claude-code-inline-visible');
 
             // Show status area (must be visible before resuming timer)
-            const statusMessage = context.baseStatusMessage || ('🤔 ' + t('status.processing'));
+            const statusMessage = context.baseStatusMessage || ('🤔 ' + t('status.processing', { backend: this.getBackendName() }));
             this.showStatus(statusMessage + '... 0.0s');
 
             // Resume elapsed time tracking with the note's own start time
@@ -379,7 +549,7 @@ export class ClaudeCodeView extends ItemView {
             this.stopElapsedTimeTracking();
             // Note is not running - show idle state
             this.runButton.disabled = false;
-            this.runButton.textContent = t('input.runButton');
+            this.runButton.textContent = t('input.runButton', { backend: this.getBackendName() });
             this.cancelButton.addClass('claude-code-hidden');
             this.cancelButton.removeClass('claude-code-inline-visible');
 
@@ -442,58 +612,80 @@ export class ClaudeCodeView extends ItemView {
             // Clear the prompt input
             this.promptInput.value = '';
 
-            // Get active file
-            const file = this.app.workspace.getActiveFile();
-            if (!file) {
-                new Notice(t('notice.noActiveNote'));
-                return;
-            }
-
-            // Find the leaf that contains this file
-            const leaves = this.app.workspace.getLeavesOfType('markdown');
-            let activeView: MarkdownView | null = null;
-
-            // Try to find the leaf with the active file
-            for (const leaf of leaves) {
-                const view = leaf.view as MarkdownView;
-                if (view.file && view.file.path === file.path) {
-                    activeView = view;
-                    break;
-                }
-            }
-
-            // Fallback: just use the first markdown view if we couldn't match by file
-            if (!activeView && leaves.length > 0) {
-                activeView = leaves[0].view as MarkdownView;
-            }
-
-            if (!activeView || !activeView.editor) {
-                new Notice(t('notice.noEditor'));
-                return;
-            }
-
-            const editor = activeView.editor;
-            const selectedText = editor.getSelection();
-            const useSelectedTextOnly = this.selectedTextOnlyCheckbox.checked && selectedText;
-            const noteContent = editor.getValue();
-
-            // Get vault path
+            // Get vault path (needed for all requests)
             const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
             if (!vaultPath) {
                 new Notice(t('notice.noVaultPath'));
                 return;
             }
 
+            // Check if this is a standalone session or if we need to create one
+            let isStandaloneSession = !!this.activeStandaloneSession;
+
+            let file: TFile | null = null;
+            let noteContent: string | undefined;
+            let selectedText: string | undefined;
+            let activeView: MarkdownView | null = null;
+
+            if (!isStandaloneSession) {
+                // Try to get active file for note-based sessions
+                file = this.app.workspace.getActiveFile();
+                if (!file) {
+                    // No active note - automatically create a standalone session
+                    const backend = this.plugin.settings.backend;
+                    const sessionInfo = SessionManager.createStandaloneSession(
+                        vaultPath,
+                        this.app.vault.configDir,
+                        backend
+                    );
+                    this.activeStandaloneSession = sessionInfo.sessionDir;
+                    this.currentNotePath = `standalone:${sessionInfo.sessionDir}`;
+                    isStandaloneSession = true;
+                    this.updateCurrentNoteLabel();
+                    this.refreshSessionsList();
+                } else {
+                    // We have a file - get editor content
+                    // Find the leaf that contains this file
+                    const leaves = this.app.workspace.getLeavesOfType('markdown');
+
+                    // Try to find the leaf with the active file
+                    for (const leaf of leaves) {
+                        const view = leaf.view as MarkdownView;
+                        if (view.file && view.file.path === file.path) {
+                            activeView = view;
+                            break;
+                        }
+                    }
+
+                    // Fallback: just use the first markdown view if we couldn't match by file
+                    if (!activeView && leaves.length > 0) {
+                        activeView = leaves[0].view as MarkdownView;
+                    }
+
+                    if (!activeView || !activeView.editor) {
+                        new Notice(t('notice.noEditor'));
+                        return;
+                    }
+
+                    const editor = activeView.editor;
+                    selectedText = editor.getSelection();
+                    const useSelectedTextOnly = this.selectedTextOnlyCheckbox.checked && selectedText;
+                    noteContent = editor.getValue();
+                    selectedText = useSelectedTextOnly ? selectedText : undefined;
+                }
+            }
+
             // Prepare request
             context.currentRequest = {
                 noteContent,
                 userPrompt: prompt,
-                notePath: file.path,
-                selectedText: useSelectedTextOnly ? selectedText : undefined,
+                notePath: file?.path,
+                selectedText,
                 vaultPath: vaultPath,
                 configDir: this.app.vault.configDir,
                 runtimeModelOverride: this.modelSelect.value || undefined,
-                conversationalMode: this.conversationalModeCheckbox.checked
+                conversationalMode: this.conversationalModeCheckbox.checked,
+                sessionDir: isStandaloneSession ? this.activeStandaloneSession! : undefined
             };
 
             // Update UI
@@ -519,11 +711,37 @@ export class ClaudeCodeView extends ItemView {
 
             // Show the last prompt and status together (keeps prompt visible during processing)
             this.showLastPrompt(prompt);
-            this.showStatus('🤔 ' + t('status.processing') + '... 0.0s');
-            this.startElapsedTimeTracking('🤔 ' + t('status.processing'));
+            this.showStatus('🤔 ' + t('status.processing', { backend: this.getBackendName() }) + '... 0.0s');
+            this.startElapsedTimeTracking('🤔 ' + t('status.processing', { backend: this.getBackendName() }));
 
-            // Capture the note path for this specific run
-            const runNotePath = file.path;
+            // Capture the note path for this specific run (or session dir for standalone)
+            const runNotePath = file?.path || `standalone:${this.activeStandaloneSession}`;
+
+            // Get session directory for file tracking (works for both standalone and note-based sessions)
+            let sessionDirForTracking: string | null = null;
+            if (isStandaloneSession && this.activeStandaloneSession) {
+                sessionDirForTracking = this.activeStandaloneSession;
+            } else if (file) {
+                // For note-based sessions, calculate the session directory
+                const sessionInfo = SessionManager.getSessionInfo(
+                    file.path,
+                    vaultPath,
+                    this.app.vault.configDir,
+                    this.plugin.settings.backend
+                );
+                sessionDirForTracking = sessionInfo.sessionDir;
+            }
+
+            // Track files created during execution for auto-linking to session
+            const createdFiles: string[] = [];
+            const fileCreateHandler = (createdFile: TFile) => {
+                if (createdFile.extension === 'md') {
+                    createdFiles.push(createdFile.path);
+                }
+            };
+
+            // Register file creation listener
+            const createEventRef = this.app.vault.on('create', fileCreateHandler);
 
             // Run Claude Code
             context.isRunning = true;
@@ -541,6 +759,18 @@ export class ClaudeCodeView extends ItemView {
             }
             );
 
+            // Unregister file creation listener
+            this.app.vault.offref(createEventRef);
+
+            // Link any created files to the session
+            if (sessionDirForTracking && createdFiles.length > 0) {
+                for (const createdPath of createdFiles) {
+                    SessionManager.addLinkedNote(sessionDirForTracking, createdPath, false);
+                }
+                // Refresh sessions list to show the new linked notes
+                this.refreshSessionsList();
+            }
+
             context.isRunning = false;
             context.currentResponse = response;
             context.executionStartTime = undefined;  // Clear per-note timing
@@ -551,7 +781,7 @@ export class ClaudeCodeView extends ItemView {
 
             // Update UI
             this.runButton.disabled = false;
-            this.runButton.textContent = t('input.runButton');
+            this.runButton.textContent = t('input.runButton', { backend: this.getBackendName() });
             this.cancelButton.addClass('claude-code-hidden');
             this.cancelButton.removeClass('claude-code-inline-visible');
 
@@ -565,7 +795,7 @@ export class ClaudeCodeView extends ItemView {
                 prompt: prompt,
                 timestamp: new Date(),
                 success: true,
-                notePath: file.path,
+                notePath: runNotePath,
                 response: response,
                 request: context.currentRequest,
                 outputLines: context.outputLines
@@ -573,21 +803,23 @@ export class ClaudeCodeView extends ItemView {
 
             this.updateHistoryDisplay(context.history);
 
-            // Save context with error handling
-            try {
-                this.contextManager.saveContext(file.path, vaultPath);
-            } catch (error) {
-                console.error('Failed to save context:', error);
+            // Save context with error handling (only for note-based sessions)
+            if (file) {
+                try {
+                    this.contextManager.saveContext(file.path, vaultPath);
+                } catch (error) {
+                    console.error('Failed to save context:', error);
+                }
             }
 
-            // Show preview or auto-apply
-            if (response.modifiedContent && response.modifiedContent.trim()) {
+            // Show preview or auto-apply (only for note-based sessions with an editor)
+            if (response.modifiedContent && response.modifiedContent.trim() && activeView?.editor) {
                 if (this.autoAcceptCheckbox.checked) {
                     // Only update UI if this is still the active note
                     if (this.currentNotePath === runNotePath) {
                         this.showStatus('✅ ' + t('status.autoApplying'));
                     }
-                    this.applyChangesToEditor(response.modifiedContent, editor);
+                    this.applyChangesToEditor(response.modifiedContent, activeView.editor);
                     // Hide status after auto-applying
                     if (this.currentNotePath === runNotePath) {
                         this.hideStatus();
@@ -611,7 +843,7 @@ export class ClaudeCodeView extends ItemView {
                             this.showResult(response.assistantMessage);
                         }
                     }
-                    new Notice('⚠️ ' + t('notice.permissionRequest'));
+                    new Notice('⚠️ ' + t('notice.permissionRequest', { backend: this.getBackendName() }));
                 } else {
                     // No file changes - show result panel with Claude's response
                     // Only update UI if this is still the active note
@@ -622,17 +854,17 @@ export class ClaudeCodeView extends ItemView {
 
                         if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                             this.showResult(response.assistantMessage);
-                            new Notice('✓ ' + t('notice.completed'));
+                            new Notice('✓ ' + t('notice.completed', { backend: this.getBackendName() }));
                         } else if (hasStreamedContent) {
                             // Result was already streamed - make earlier blocks collapsible
                             this.makeEarlierBlocksCollapsible();
-                            new Notice('✓ ' + t('notice.completed'));
+                            new Notice('✓ ' + t('notice.completed', { backend: this.getBackendName() }));
                         } else {
-                            new Notice('✓ ' + t('notice.completedNoChanges'));
+                            new Notice('✓ ' + t('notice.completedNoChanges', { backend: this.getBackendName() }));
                         }
                     } else {
                         // Silently complete - user is on a different note
-                        new Notice('✓ ' + t('notice.completed'));
+                        new Notice('✓ ' + t('notice.completed', { backend: this.getBackendName() }));
                     }
                 }
             }
@@ -646,7 +878,7 @@ export class ClaudeCodeView extends ItemView {
                 prompt: prompt,
                 timestamp: new Date(),
                 success: false,
-                notePath: file.path,
+                notePath: runNotePath,
                 response: response,
                 request: context.currentRequest
             });
@@ -690,7 +922,6 @@ export class ClaudeCodeView extends ItemView {
                 this.outputRenderer.appendStreamingText(text);
 
                 // Also append to Result section if it's an assistant message
-                console.debug('[Append Output] isStreaming=true, isAssistantMessage=', isAssistantMessage);
                 if (isAssistantMessage) {
                     this.appendToResultUI(text);
                 }
@@ -765,7 +996,7 @@ export class ClaudeCodeView extends ItemView {
      * Check if output line indicates a tool is starting
      */
     private isToolStart(text: string): boolean {
-        return text.includes('🔧 Using tool:') ||
+        return text.includes('Using tool:') ||
                text.includes('$ ') ||
                text.includes('🔍 Glob searching:') ||
                text.includes('🔎 Grep searching:') ||
@@ -792,6 +1023,7 @@ export class ClaudeCodeView extends ItemView {
      * Tool icon mapping for display
      */
     private static readonly TOOL_ICONS: Record<string, { icon: string; description: string }> = {
+        // Claude CLI tools (capitalized)
         'Read': { icon: '📖', description: 'Read file contents' },
         'Write': { icon: '✍️', description: 'Write file contents' },
         'Edit': { icon: '✏️', description: 'Edit file contents' },
@@ -804,6 +1036,20 @@ export class ClaudeCodeView extends ItemView {
         'TodoWrite': { icon: '📋', description: 'Update task list' },
         'AskUserQuestion': { icon: '❓', description: 'Ask user a question' },
         'NotebookEdit': { icon: '📓', description: 'Edit Jupyter notebook' },
+        // OpenCode tools (lowercase)
+        'read': { icon: '📖', description: 'Read file contents' },
+        'write': { icon: '✍️', description: 'Write file contents' },
+        'edit': { icon: '✏️', description: 'Edit file contents' },
+        'bash': { icon: '💻', description: 'Execute shell command' },
+        'glob': { icon: '🔍', description: 'Search files by pattern' },
+        'grep': { icon: '🔎', description: 'Search file contents' },
+        'webfetch': { icon: '🌍', description: 'Fetch web content' },
+        'websearch': { icon: '🌐', description: 'Search the web' },
+        'todoread': { icon: '📋', description: 'Read task list' },
+        'todowrite': { icon: '📝', description: 'Update task list' },
+        'list': { icon: '📁', description: 'List directory contents' },
+        'patch': { icon: '🩹', description: 'Apply patch to file' },
+        'think': { icon: '🧠', description: 'Extended thinking' },
         'default': { icon: '🔧', description: 'Tool execution' }
     };
 
@@ -882,7 +1128,7 @@ export class ClaudeCodeView extends ItemView {
         }
 
         // Detect TodoWrite tool usage (with or without emoji)
-        if (line.includes('Using tool: TodoWrite') || line.includes('🔧 Using tool: TodoWrite')) {
+        if (line.includes('Using tool: TodoWrite')) {
             // Schedule parsing after a short delay to ensure all output is captured
             setTimeout(() => this.parseTodosFromOutput(), 100);
         }
@@ -1292,7 +1538,7 @@ export class ClaudeCodeView extends ItemView {
      * Used for streaming assistant messages when the current note is active
      */
     private appendToResultUI(text: string): void {
-        console.debug('[Append To Result UI] Called with text:', text.substring(0, 50));
+        console.debug('[appendToResultUI] CALLED - text:', text.substring(0, 30), '- stack:', new Error().stack?.split('\n').slice(1, 4).join(' <- '));
 
         // If we've already hit the FINAL-CONTENT marker, ignore all subsequent chunks
         if (this.hitFinalContentMarker) {
@@ -1315,7 +1561,6 @@ export class ClaudeCodeView extends ItemView {
 
         // Create streaming element if needed (with markdown-rendered class)
         if (!this.currentResultStreamingElement) {
-            console.debug('[Append To Result UI] Creating streaming element');
             this.currentResultStreamingElement = this.resultArea.createEl('div', {
                 cls: 'claude-code-result-streaming markdown-rendered'
             });
@@ -1354,42 +1599,139 @@ export class ClaudeCodeView extends ItemView {
         (this.currentResultStreamingElement as unknown as StreamingElementData).accumulatedText = combinedText;
         this.renderStreamingMarkdown(combinedText);
 
-        console.debug('[Append To Result UI] Appended chunk, accumulated length:', combinedText.length);
-
         // Smart auto-scroll (respects user scroll position)
         this.autoScrollResult();
     }
 
+    /** Pending markdown render timeout */
+    private markdownRenderTimeout: NodeJS.Timeout | null = null;
+    /** Current streaming text span for updates */
+    private streamingTextSpan: HTMLSpanElement | null = null;
+
     /**
-     * Render accumulated markdown text by detecting and rendering complete blocks
-     * Appends complete paragraphs/blocks as independent chunks
+     * Render accumulated text during streaming with live markdown
+     * Uses debounced markdown rendering for performance
      */
     private renderStreamingMarkdown(text: string): void {
-        if (!this.currentResultStreamingElement) return;
-
-        // Get the new content
-        const newContent = text.substring(this.lastRenderedText.length);
-        if (!newContent) return;
-
-        // Extract what we can render now
-        const { completeBlocks, remainingText } = this.extractCompleteBlocks(newContent);
-
-        if (completeBlocks.length > 0) {
-            // Remove any incomplete plain text from last render
-            this.removeIncompletePlainText();
-
-            // Render each complete block as a separate chunk
-            for (const block of completeBlocks) {
-                this.appendMarkdownBlock(block);
-            }
-
-            // Update what we've rendered
-            this.lastRenderedText = this.lastRenderedText + newContent.substring(0, newContent.length - remainingText.length);
+        if (!this.currentResultStreamingElement) {
+            return;
         }
 
-        // Append any remaining incomplete text as plain text
-        if (remainingText) {
-            this.appendPlainText(remainingText);
+        // Create or update text span for immediate display (no clearing!)
+        if (!this.streamingTextSpan || !this.currentResultStreamingElement.contains(this.streamingTextSpan)) {
+            this.currentResultStreamingElement.empty();
+            this.streamingTextSpan = this.currentResultStreamingElement.createEl('span', {
+                cls: 'claude-code-streaming-text'
+            });
+        }
+        this.streamingTextSpan.textContent = text;
+
+        // Debounce full markdown rendering to avoid flickering
+        if (this.markdownRenderTimeout) {
+            clearTimeout(this.markdownRenderTimeout);
+        }
+
+        // Render proper markdown after a short delay (when streaming pauses)
+        this.markdownRenderTimeout = setTimeout(() => {
+            if (this.currentResultStreamingElement && this.streamingTextSpan) {
+                // Replace text span with rendered markdown
+                const tempContainer = document.createElement('div');
+                void MarkdownRenderer.render(
+                    this.app,
+                    text,
+                    tempContainer,
+                    this.currentNotePath,
+                    this
+                ).then(() => {
+                    if (this.currentResultStreamingElement) {
+                        this.currentResultStreamingElement.empty();
+                        while (tempContainer.firstChild) {
+                            this.currentResultStreamingElement.appendChild(tempContainer.firstChild);
+                        }
+                        this.streamingTextSpan = null;
+
+                        // Process file paths to make them clickable
+                        this.processFileLinksInElement(this.currentResultStreamingElement);
+                    }
+                });
+            }
+        }, 300);
+    }
+
+    /**
+     * Process an element to make file paths clickable
+     */
+    private processFileLinksInElement(element: HTMLElement): void {
+        const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+        if (!vaultPath) return;
+
+        // Walk through all text nodes and replace file paths with links
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT,
+            null
+        );
+
+        const textNodes: Text[] = [];
+        let node: Text | null;
+        while ((node = walker.nextNode() as Text | null)) {
+            textNodes.push(node);
+        }
+
+        // Pattern to match file paths (absolute paths ending in .md)
+        const filePathPattern = new RegExp(
+            '(' + vaultPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/[\\w\\-\\./ ]+\\.md)',
+            'gi'
+        );
+
+        for (const textNode of textNodes) {
+            const text = textNode.textContent || '';
+            if (!filePathPattern.test(text)) continue;
+
+            // Reset regex lastIndex
+            filePathPattern.lastIndex = 0;
+
+            // Create a document fragment to hold the new content
+            const fragment = document.createDocumentFragment();
+            let lastIndex = 0;
+            let match;
+
+            while ((match = filePathPattern.exec(text)) !== null) {
+                // Add text before the match
+                if (match.index > lastIndex) {
+                    fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+                }
+
+                const fullPath = match[1];
+                const relativePath = fullPath.substring(vaultPath.length + 1);
+
+                // Create clickable link
+                const link = document.createElement('a');
+                link.className = 'claude-code-file-link';
+                link.textContent = fullPath;
+                link.href = '#';
+                link.title = `Open ${relativePath}`;
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const file = this.app.vault.getAbstractFileByPath(relativePath);
+                    if (file instanceof TFile) {
+                        void this.app.workspace.getLeaf(false).openFile(file);
+                    }
+                });
+
+                fragment.appendChild(link);
+                lastIndex = match.index + match[0].length;
+            }
+
+            // Add remaining text
+            if (lastIndex < text.length) {
+                fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+            }
+
+            // Replace the text node with the fragment
+            if (lastIndex > 0) {
+                textNode.parentNode?.replaceChild(fragment, textNode);
+            }
         }
     }
 
@@ -1438,6 +1780,55 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
+     * Convert file paths in text to clickable links
+     * Converts absolute paths inside vault to markdown-style links
+     */
+    private linkifyFilePaths(text: string): string {
+        try {
+            const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+            if (!vaultPath) return text;
+
+            // Pattern to match file paths (absolute paths ending in .md)
+            // Use space ' ' instead of \s to avoid matching newlines
+            const escapedVaultPath = vaultPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const filePathPattern = new RegExp(
+                escapedVaultPath + '/[\\w\\-\\./ ]+\\.md',
+                'g'
+            );
+
+            // Replace paths, but skip those inside backticks (code formatting)
+            const result = text.replace(filePathPattern, (match: string, offset: number) => {
+                // Check if the match is inside backticks (inline code)
+                const beforeMatch = text.substring(Math.max(0, offset - 50), offset);
+                const afterMatch = text.substring(offset + match.length, Math.min(text.length, offset + match.length + 10));
+
+                const startsWithBacktick = beforeMatch.endsWith('`');
+                const endsWithBacktick = afterMatch.startsWith('`');
+
+                // Skip if appears to be inside inline code (between backticks)
+                if (startsWithBacktick && endsWithBacktick) {
+                    return match; // Keep as-is, don't linkify
+                }
+
+                // Also skip if we're in a code block (odd number of triple backticks before)
+                const tripleBackticksBefore = (text.substring(0, offset).match(/```/g) || []).length;
+                if (tripleBackticksBefore % 2 === 1) {
+                    return match; // Inside code block, don't linkify
+                }
+
+                // Convert to relative path for the link
+                const relativePath = match.substring(vaultPath.length + 1);
+                return `[📄 ${match}](obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(relativePath)})`;
+            });
+
+            return result;
+        } catch (error) {
+            console.error('[linkifyFilePaths] Error:', error);
+            return text;
+        }
+    }
+
+    /**
      * Append a complete markdown block as an independent rendered chunk
      */
     private appendMarkdownBlock(blockText: string): void {
@@ -1447,9 +1838,12 @@ export class ClaudeCodeView extends ItemView {
         const blockContainer = document.createElement('div');
         blockContainer.addClass('markdown-block');
 
+        // Linkify file paths before rendering markdown
+        const processedText = this.linkifyFilePaths(blockText);
+
         void MarkdownRenderer.render(
             this.app,
-            blockText,
+            processedText,
             blockContainer,
             this.currentNotePath,
             this
@@ -1464,19 +1858,73 @@ export class ClaudeCodeView extends ItemView {
 
     /**
      * Append plain text without any processing
+     * Note: This is called repeatedly with the FULL accumulated remainingText,
+     * so we need to REPLACE any previous incomplete content, not append to it.
+     * Links will be added at the end in finishResultStreaming.
      */
     private appendPlainText(text: string): void {
         if (!this.currentResultStreamingElement) return;
 
-        // Check if we already have a plain text container
+        // Find and remove any previous incomplete content (text node only, not markdown blocks)
         const lastChild = this.currentResultStreamingElement.lastChild;
         if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
-            // REPLACE existing text node (remainingText already contains the full text)
-            lastChild.textContent = text;
-        } else {
-            // Create new text node
-            const textNode = document.createTextNode(text);
-            this.currentResultStreamingElement.appendChild(textNode);
+            this.currentResultStreamingElement.removeChild(lastChild);
+        }
+
+        // Just add plain text - linkification happens at the end in finishResultStreaming
+        const textNode = document.createTextNode(text);
+        this.currentResultStreamingElement.appendChild(textNode);
+    }
+
+    /**
+     * Render text with clickable file links (for Result section)
+     */
+    private renderTextWithFileLinks(container: HTMLElement, text: string, vaultPath: string): void {
+        // Pattern to match file paths
+        // Use space ' ' instead of \s to avoid matching newlines
+        const filePathPattern = new RegExp(
+            '(' + vaultPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/[\\w\\-\\./ ]+\\.md)',
+            'gi'
+        );
+
+        let lastIndex = 0;
+        let match;
+
+        while ((match = filePathPattern.exec(text)) !== null) {
+            // Add text before the match
+            if (match.index > lastIndex) {
+                container.appendText(text.substring(lastIndex, match.index));
+            }
+
+            const fullPath = match[1];
+            const relativePath = fullPath.substring(vaultPath.length + 1);
+
+            // Create clickable link
+            const link = container.createEl('a', {
+                cls: 'claude-code-file-link',
+                text: fullPath
+            });
+            link.setAttribute('href', '#');
+            link.setAttribute('title', `Open ${relativePath}`);
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const file = this.app.vault.getAbstractFileByPath(relativePath);
+                if (file instanceof TFile) {
+                    void this.app.workspace.getLeaf(false).openFile(file);
+                }
+            });
+
+            lastIndex = match.index + match[0].length;
+        }
+
+        // Add remaining text
+        if (lastIndex < text.length) {
+            container.appendText(text.substring(lastIndex));
+        }
+
+        // If no matches were found, just set the text
+        if (lastIndex === 0) {
+            container.textContent = text;
         }
     }
 
@@ -1539,10 +1987,13 @@ export class ClaudeCodeView extends ItemView {
             cls: 'markdown-rendered'
         });
 
+        // Linkify file paths before rendering
+        const processedText = this.linkifyFilePaths(filteredText);
+
         // Render as markdown
         void MarkdownRenderer.render(
             this.app,
-            filteredText,
+            processedText,
             contentDiv,
             this.currentNotePath,
             this
@@ -1593,48 +2044,56 @@ export class ClaudeCodeView extends ItemView {
 
     /**
      * Finish the streaming result block
+     * Clear all streaming content and re-render as proper markdown with links
      */
     private finishResultStreaming(): void {
+        // Clear any pending markdown render timeout
+        if (this.markdownRenderTimeout) {
+            clearTimeout(this.markdownRenderTimeout);
+            this.markdownRenderTimeout = null;
+        }
+
+        // Clear streaming text span reference
+        this.streamingTextSpan = null;
+
         if (this.currentResultStreamingElement) {
-            console.debug('[Finish Result Streaming] Cleaning up streaming state');
-
-            // Get the accumulated text from the streaming element
+            // Get the accumulated text
             const accumulatedText = (this.currentResultStreamingElement as unknown as StreamingElementData).accumulatedText || '';
+            const elementToFinish = this.currentResultStreamingElement;
 
-            // Check if there's any text we haven't rendered yet
-            if (accumulatedText && accumulatedText.length > this.lastRenderedText.length) {
-                const unrenderedText = accumulatedText.substring(this.lastRenderedText.length);
-                if (unrenderedText.trim()) {
-                    console.debug('[Finish Result Streaming] Rendering final unrendered text:', unrenderedText.substring(0, 50));
-                    // Remove any plain text node
-                    const lastChild = this.currentResultStreamingElement.lastChild;
-                    if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
-                        this.currentResultStreamingElement.removeChild(lastChild);
+            if (accumulatedText.trim()) {
+                // Apply linkification to the full text
+                const processedText = this.linkifyFilePaths(accumulatedText);
+
+                // Create a temporary container for the new content
+                const tempContainer = document.createElement('div');
+
+                // Render markdown into temp container, then swap
+                void MarkdownRenderer.render(
+                    this.app,
+                    processedText,
+                    tempContainer,
+                    this.currentNotePath,
+                    this
+                ).then(() => {
+                    // Only swap after render is complete
+                    elementToFinish.empty();
+                    while (tempContainer.firstChild) {
+                        elementToFinish.appendChild(tempContainer.firstChild);
                     }
-                    // Render the unrendered portion as a markdown block
-                    this.appendMarkdownBlock(unrenderedText);
-                }
-            } else {
-                // No unrendered text, just convert any remaining plain text to a markdown block
-                const lastChild = this.currentResultStreamingElement.lastChild;
-                if (lastChild && lastChild.nodeType === Node.TEXT_NODE) {
-                    const remainingText = lastChild.textContent || '';
-                    if (remainingText.trim()) {
-                        // Remove the plain text node
-                        this.currentResultStreamingElement.removeChild(lastChild);
-                        // Render it as a final markdown block
-                        this.appendMarkdownBlock(remainingText);
-                    }
-                }
+                }).catch((e: unknown) => {
+                    console.error('[Finish Result Streaming] Render error:', e);
+                    // Keep existing content on error
+                });
             }
 
-            // Just update the CSS class - content is already rendered as markdown
-            this.currentResultStreamingElement.removeClass('claude-code-result-streaming');
-            this.currentResultStreamingElement.addClass('markdown-rendered');
-            this.currentResultStreamingElement.addClass('claude-code-result-block');
-            this.currentResultStreamingElement.setAttribute('data-block-index', String(this.resultBlockCount));
+            // Update CSS classes
+            elementToFinish.removeClass('claude-code-result-streaming');
+            elementToFinish.addClass('markdown-rendered');
+            elementToFinish.addClass('claude-code-result-block');
+            elementToFinish.setAttribute('data-block-index', String(this.resultBlockCount));
 
-            // Add a divider after this block (will separate from next content block)
+            // Add a divider after this block
             const divider = document.createElement('hr');
             divider.addClass('claude-code-block-divider');
             this.resultArea.appendChild(divider);
@@ -1642,7 +2101,7 @@ export class ClaudeCodeView extends ItemView {
             // Increment block counter
             this.resultBlockCount++;
 
-            // Clear the streaming element reference (keep content in DOM)
+            // Clear the streaming element reference
             this.currentResultStreamingElement = null;
         }
         // Reset rendering state for next block
@@ -1704,13 +2163,15 @@ export class ClaudeCodeView extends ItemView {
         const finalContentIndex = message.indexOf('---FINAL-CONTENT---');
         if (finalContentIndex !== -1) {
             filteredMessage = message.substring(0, finalContentIndex).trim();
-            console.debug('[Show Result] Filtered FINAL-CONTENT, original length:', message.length, 'filtered length:', filteredMessage.length);
         }
+
+        // Linkify file paths before rendering
+        const processedMessage = this.linkifyFilePaths(filteredMessage);
 
         // Render as markdown
         void MarkdownRenderer.render(
             this.app,
-            filteredMessage,
+            processedMessage,
             this.resultArea,
             this.currentNotePath,
             this
@@ -1858,7 +2319,7 @@ export class ClaudeCodeView extends ItemView {
 
         // Update UI
         this.runButton.disabled = false;
-        this.runButton.textContent = t('input.runButton');
+        this.runButton.textContent = t('input.runButton', { backend: this.getBackendName() });
 
         this.cancelButton.addClass('claude-code-hidden');
         this.cancelButton.removeClass('claude-code-inline-visible');
@@ -1902,15 +2363,15 @@ export class ClaudeCodeView extends ItemView {
 
                     if (!hasStreamedContent && response.assistantMessage && response.assistantMessage.trim()) {
                         this.showResult(response.assistantMessage);
-                        new Notice('✓ ' + t('notice.completed'));
+                        new Notice('✓ ' + t('notice.completed', { backend: this.getBackendName() }));
                     } else if (hasStreamedContent) {
                         // Result was already streamed, just show notice
-                        new Notice('✓ ' + t('notice.completed'));
+                        new Notice('✓ ' + t('notice.completed', { backend: this.getBackendName() }));
                     } else {
-                        new Notice('✓ ' + t('notice.completedNoChanges'));
+                        new Notice('✓ ' + t('notice.completedNoChanges', { backend: this.getBackendName() }));
                     }
                 } else {
-                    new Notice('✓ ' + t('notice.completed'));
+                    new Notice('✓ ' + t('notice.completed', { backend: this.getBackendName() }));
                 }
             }
         } else {
@@ -1926,7 +2387,7 @@ export class ClaudeCodeView extends ItemView {
      */
     private handleDenyPermission(): void {
         this.hidePermissionApprovalSection();
-        new Notice(t('notice.permissionDenied'));
+        new Notice(t('notice.permissionDenied', { backend: this.getBackendName() }));
     }
 
     /**
@@ -2024,7 +2485,7 @@ export class ClaudeCodeView extends ItemView {
         context.executionStartTime = undefined;
         context.baseStatusMessage = undefined;
         this.runButton.disabled = false;
-        this.runButton.textContent = t('input.runButton');
+        this.runButton.textContent = t('input.runButton', { backend: this.getBackendName() });
         this.cancelButton.addClass('claude-code-hidden');
         this.cancelButton.removeClass('claude-code-inline-visible');
         this.hideStatus();
@@ -2142,6 +2603,315 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
+     * Refresh the sessions list from disk
+     */
+    private refreshSessionsList(): void {
+        const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+        if (!vaultPath) return;
+
+        const sessions = SessionManager.listAllSessions(vaultPath, this.app.vault.configDir);
+        const sessionsList = document.getElementById('claude-code-sessions-list');
+
+        if (!sessionsList) return;
+
+        // Clean up any existing timer intervals before clearing
+        const oldBadges = sessionsList.querySelectorAll('.claude-code-session-running-badge');
+        oldBadges.forEach((badge) => {
+            const badgeEl = badge as HTMLElement & { _intervalId?: ReturnType<typeof setInterval> };
+            if (badgeEl._intervalId) {
+                clearInterval(badgeEl._intervalId);
+            }
+        });
+
+        // Clear existing items
+        sessionsList.empty();
+
+        if (sessions.length === 0) {
+            // Show empty message
+            sessionsList.createEl('div', {
+                cls: 'claude-code-sessions-empty',
+                text: t('sessions.empty')
+            });
+            return;
+        }
+
+        // Get running note paths to show running indicator
+        const runningPaths = this.contextManager.getRunningNotePaths();
+
+        // Create session items
+        for (const session of sessions) {
+            // Check if any linked note is running
+            const linkedNotePaths = session.metadata.linkedNotes?.map(n => n.path) || [];
+            const isRunning = linkedNotePaths.some(p => runningPaths.includes(p));
+            const isStandalone = session.metadata.isStandalone && linkedNotePaths.length === 0;
+
+            const sessionItem = sessionsList.createEl('div', {
+                cls: `claude-code-session-item claude-code-cursor-pointer${isRunning ? ' is-running' : ''}${isStandalone ? ' is-standalone' : ''}`
+            });
+            sessionItem.setAttribute('title', t('sessions.openSession'));
+
+            // Make entire item clickable to open session
+            sessionItem.addEventListener('click', () => this.openSession(session.sessionDir));
+
+            // Left side: session info
+            const infoDiv = sessionItem.createEl('div', { cls: 'claude-code-session-info' });
+
+            // Session name
+            const titleEl = infoDiv.createEl('div', { cls: 'claude-code-session-title' });
+            if (isStandalone) {
+                titleEl.createEl('span', { cls: 'claude-code-session-standalone-icon', text: '📝 ' });
+            }
+            titleEl.appendText(session.metadata.sessionName || 'Untitled Session');
+
+            // Linked notes (if any)
+            if (linkedNotePaths.length > 0) {
+                const notesEl = infoDiv.createEl('div', { cls: 'claude-code-session-notes' });
+                for (const note of session.metadata.linkedNotes.slice(0, 3)) {
+                    const noteLink = notesEl.createEl('span', {
+                        cls: 'claude-code-session-note-link',
+                        text: note.title
+                    });
+                    noteLink.setAttribute('title', note.path);
+                    noteLink.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        void this.openNoteByPath(note.path);
+                    });
+                }
+                if (linkedNotePaths.length > 3) {
+                    notesEl.createEl('span', {
+                        cls: 'claude-code-session-note-more',
+                        text: `+${linkedNotePaths.length - 3} more`
+                    });
+                }
+            }
+
+            // Metadata line
+            const metaEl = infoDiv.createEl('div', { cls: 'claude-code-session-meta' });
+
+            // Running badge with live timer (if running)
+            if (isRunning) {
+                const runningBadge = metaEl.createEl('span', {
+                    cls: 'claude-code-session-running-badge'
+                });
+                runningBadge.createEl('span', { cls: 'claude-code-spinner' });
+                const timerSpan = runningBadge.createEl('span', { cls: 'claude-code-session-timer' });
+
+                // Get start time from first running note's context
+                const runningNotePath = linkedNotePaths.find(p => runningPaths.includes(p));
+                const context = runningNotePath ? this.contextManager.getContext(runningNotePath) : null;
+                const startTime = context?.executionStartTime;
+
+                // Update timer immediately and set interval
+                const updateTimer = () => {
+                    if (startTime) {
+                        const elapsed = Date.now() - startTime;
+                        const seconds = Math.floor(elapsed / 1000);
+                        const mins = Math.floor(seconds / 60);
+                        const secs = seconds % 60;
+                        timerSpan.textContent = mins > 0
+                            ? `${mins}m ${secs}s`
+                            : `${secs}s`;
+                    } else {
+                        timerSpan.textContent = 'Running...';
+                    }
+                };
+                updateTimer();
+
+                // Store interval ID on the element for cleanup
+                const intervalId = setInterval(updateTimer, 1000);
+                (runningBadge as HTMLElement & { _intervalId?: ReturnType<typeof setInterval> })._intervalId = intervalId;
+            }
+
+            // Standalone badge
+            if (isStandalone) {
+                metaEl.createEl('span', {
+                    cls: 'claude-code-session-standalone-badge',
+                    text: t('sessions.standalone')
+                });
+            }
+
+            // Backend badge
+            metaEl.createEl('span', {
+                cls: `claude-code-session-backend claude-code-backend-${session.metadata.backend}`,
+                text: session.metadata.backend === 'claude' ? 'Claude' : 'OpenCode'
+            });
+
+            // Last used time
+            const lastUsed = new Date(session.metadata.lastUsed);
+            const timeAgo = this.formatTimeAgo(lastUsed);
+            metaEl.createEl('span', {
+                cls: 'claude-code-session-time',
+                text: timeAgo
+            });
+
+            // Message count
+            metaEl.createEl('span', {
+                cls: 'claude-code-session-messages',
+                text: `${session.metadata.messageCount} ${t('sessions.messages')}`
+            });
+
+            // Right side: delete button
+            const deleteBtn = sessionItem.createEl('button', {
+                cls: 'claude-code-session-delete',
+                attr: { 'aria-label': t('sessions.deleteSession') }
+            });
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteSession(session.sessionDir);
+            });
+        }
+    }
+
+    /**
+     * Format a date as relative time ago (e.g., "2 hours ago")
+     */
+    private formatTimeAgo(date: Date): string {
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    }
+
+    /**
+     * Open a note by its path and switch to Assistant tab
+     */
+    private async openNoteByPath(notePath: string): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(notePath);
+        if (file instanceof TFile) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+            // Switch to assistant tab after opening
+            this.switchTab('assistant');
+        } else {
+            new Notice(`File not found: ${notePath}`);
+        }
+    }
+
+    /**
+     * Delete a session and refresh the list
+     */
+    private deleteSession(sessionDir: string): void {
+        // eslint-disable-next-line no-alert
+        if (confirm(t('sessions.deleteConfirm'))) {
+            const success = SessionManager.deleteSession(sessionDir);
+            if (success) {
+                new Notice(t('sessions.deleted'));
+                this.refreshSessionsList();
+            }
+        }
+    }
+
+    /**
+     * Create a new standalone session
+     */
+    private createNewSession(): void {
+        const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+        if (!vaultPath) {
+            new Notice('Could not determine vault path');
+            return;
+        }
+
+        const backend = this.plugin.settings.backend;
+        const sessionInfo = SessionManager.createStandaloneSession(
+            vaultPath,
+            this.app.vault.configDir,
+            backend
+        );
+
+        // Store the active session for standalone mode
+        this.activeStandaloneSession = sessionInfo.sessionDir;
+
+        // Switch to assistant tab
+        this.switchTab('assistant');
+
+        // Set the current note path to standalone format (so UI updates work)
+        this.currentNotePath = `standalone:${sessionInfo.sessionDir}`;
+        this.updateCurrentNoteLabel();
+
+        // Clear the output and result areas
+        this.outputRenderer?.clear();
+        this.resultArea?.empty();
+        this.resultArea?.addClass('claude-code-hidden');
+        this.agentTracker.clear();
+        this.clearTodoList();
+
+        // Focus the prompt input
+        this.promptInput.focus();
+
+        new Notice(t('sessions.created'));
+        this.refreshSessionsList();
+    }
+
+    /**
+     * Open an existing session
+     */
+    private openSession(sessionDir: string): void {
+        const metadata = SessionManager.getSessionMetadata(sessionDir);
+        if (!metadata) {
+            new Notice('Session not found');
+            return;
+        }
+
+        // If session has linked notes, open the primary one
+        const primaryNote = metadata.linkedNotes?.find(n => n.isPrimary) || metadata.linkedNotes?.[0];
+        if (primaryNote) {
+            void this.openNoteByPath(primaryNote.path);
+        } else {
+            // Standalone session with no linked notes - set as active standalone session
+            this.activeStandaloneSession = sessionDir;
+            this.currentNotePath = `standalone:${sessionDir}`;
+            this.updateCurrentNoteLabel();
+
+            // Switch to assistant tab
+            this.switchTab('assistant');
+
+            // Clear the output and result areas first
+            this.outputRenderer?.clear();
+            this.resultArea?.empty();
+            this.agentTracker.clear();
+            this.clearTodoList();
+        }
+
+        // Load and show the last result from this session
+        this.loadSessionLastResult(sessionDir);
+
+        // Focus the prompt input
+        this.promptInput.focus();
+    }
+
+    /**
+     * Load and display the last result from a session
+     */
+    private loadSessionLastResult(sessionDir: string): void {
+        // Get the last assistant response
+        const lastResponse = SessionManager.getLastAssistantResponse(sessionDir);
+        const lastPrompt = SessionManager.getLastUserPrompt(sessionDir);
+
+        if (lastPrompt) {
+            this.showLastPrompt(lastPrompt);
+        }
+
+        if (lastResponse) {
+            // Show the last response in the Result section
+            this.showResult(lastResponse);
+        } else {
+            // No previous result, hide the result area
+            this.resultArea?.addClass('claude-code-hidden');
+            const resultSection = document.getElementById('claude-code-result-section');
+            if (resultSection) {
+                resultSection.addClass('claude-code-hidden');
+            }
+        }
+    }
+
+    /**
      * Clear the todo list display
      */
     private clearTodoList(): void {
@@ -2240,14 +3010,86 @@ export class ClaudeCodeView extends ItemView {
     }
 
     /**
-     * Update settings
+     * Open the plugin settings page
+     */
+    private openPluginSettings(): void {
+        // Access Obsidian's settings modal and open the plugin tab
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+        const setting = (this.app as any).setting as { open: () => void; openTabById: (id: string) => void } | undefined;
+        if (setting) {
+            setting.open();
+            setting.openTabById('claude-code-integration');
+        }
+    }
+
+    /**
+     * Update settings - called when plugin settings are changed
      */
     updateSettings(): void {
+        // Update context manager with new settings (propagates to all runners)
+        this.contextManager.updateSettings(this.plugin.settings);
+
+        // Check if backend changed - requires full UI rebuild
+        if (this.currentBackend !== this.plugin.settings.backend) {
+            this.currentBackend = this.plugin.settings.backend;
+            this.rebuildUI();
+            return;
+        }
+
+        // Update UI elements
         this.autoAcceptCheckbox.checked = this.plugin.settings.autoAcceptChanges;
         this.modelSelect.value = this.plugin.settings.modelAlias;
+
+        // Update the leaf tab title (in case backend changed)
+        // Use unofficial API to update title element directly
+        const titleEl = (this.leaf as unknown as { tabHeaderInnerTitleEl?: HTMLElement }).tabHeaderInnerTitleEl;
+        if (titleEl) {
+            titleEl.textContent = this.getDisplayText();
+        }
+    }
+
+    /**
+     * Rebuild the entire UI - called when backend changes
+     */
+    private rebuildUI(): void {
+        const container = this.containerEl.children[1] as HTMLElement;
+
+        // Clean up existing event listeners
+        if (this.promptInputKeydownHandler) {
+            this.promptInput.removeEventListener('keydown', this.promptInputKeydownHandler);
+            this.promptInputKeydownHandler = null;
+        }
+        for (const { element, event, handler } of this.eventListeners) {
+            element.removeEventListener(event, handler);
+        }
+        this.eventListeners = [];
+
+        // Stop intervals
+        this.stopSessionsAutoRefresh();
+        this.stopElapsedTimeTracking();
+
+        // Clear and rebuild
+        container.empty();
+        container.addClass('claude-code-view');
+        this.buildUI(container);
+
+        // Reinitialize output renderer
+        this.outputRenderer = new OutputRenderer(this.outputArea, this, this.app, this.currentNotePath, this.outputSection);
+
+        // Reload context for current note
+        if (this.currentNotePath) {
+            this.loadNoteContext(this.currentNotePath);
+        }
+
+        // Update tab title
+        const titleEl = (this.leaf as unknown as { tabHeaderInnerTitleEl?: HTMLElement }).tabHeaderInnerTitleEl;
+        if (titleEl) {
+            titleEl.textContent = this.getDisplayText();
+        }
     }
 
     async onClose(): Promise<void> {
+
         // Clean up event listeners
         if (this.promptInputKeydownHandler) {
             this.promptInput.removeEventListener('keydown', this.promptInputKeydownHandler);
@@ -2258,6 +3100,10 @@ export class ClaudeCodeView extends ItemView {
             element.removeEventListener(event, handler);
         }
         this.eventListeners = [];
+
+        // Clean up intervals
+        this.stopSessionsAutoRefresh();
+        this.stopElapsedTimeTracking();
 
         // Save all contexts
         const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();

@@ -32,10 +32,20 @@ export class UIBuilder {
     /**
      * Build the header section
      */
-    static buildHeader(container: HTMLElement): HTMLDivElement {
+    static buildHeader(container: HTMLElement, backendName: string = 'Claude Code', onSettingsClick?: () => void): HTMLDivElement {
         const header = container.createEl('div', { cls: 'claude-code-header' });
         const headerTitle = header.createEl('div', { cls: 'claude-code-header-title' });
-        headerTitle.createEl('h4', { text: t('header.title') });
+        headerTitle.createEl('h4', { text: t('header.title', { backend: backendName }) });
+
+        // Settings cog icon
+        if (onSettingsClick) {
+            const settingsButton = headerTitle.createEl('button', {
+                cls: 'claude-code-settings-button clickable-icon',
+                text: '⚙️',
+                attr: { 'aria-label': t('header.settings') }
+            });
+            settingsButton.addEventListener('click', onSettingsClick);
+        }
 
         const currentNoteLabel = header.createEl('div', { cls: 'claude-code-current-note' });
         return currentNoteLabel;
@@ -48,7 +58,8 @@ export class UIBuilder {
         container: HTMLElement,
         autoAcceptDefault: boolean,
         onRun: () => void,
-        onCancel: () => void
+        onCancel: () => void,
+        backendName: string = 'Claude Code'
     ): {
         promptInput: HTMLTextAreaElement;
         selectedTextOnlyCheckbox: HTMLInputElement;
@@ -104,7 +115,7 @@ export class UIBuilder {
 
         const runButton = buttonContainer.createEl('button', {
             cls: 'mod-cta',
-            text: t('input.runButton')
+            text: t('input.runButton', { backend: backendName })
         });
         runButton.addEventListener('click', onRun);
 
@@ -190,7 +201,8 @@ export class UIBuilder {
      */
     static buildInteractivePromptSection(
         container: HTMLElement,
-        onRespond: (response: string) => void
+        onRespond: (response: string) => void,
+        backendName: string = 'Claude Code'
     ): HTMLDivElement {
         const interactivePromptSection = container.createEl('div', {
             cls: 'claude-code-interactive-prompt claude-code-hidden'
@@ -199,7 +211,7 @@ export class UIBuilder {
 
         interactivePromptSection.createEl('div', {
             cls: 'interactive-prompt-header',
-            text: '❓ ' + t('interactive.header')
+            text: '❓ ' + t('interactive.header', { backend: backendName })
         });
 
         interactivePromptSection.createEl('div', {
@@ -244,7 +256,8 @@ export class UIBuilder {
     static buildPermissionApprovalSection(
         container: HTMLElement,
         onApprove: () => void,
-        onDeny: () => void
+        onDeny: () => void,
+        backendName: string = 'Claude Code'
     ): {
         permissionApprovalSection: HTMLDivElement;
         approvePermissionButton: HTMLButtonElement;
@@ -262,7 +275,7 @@ export class UIBuilder {
 
         permissionApprovalSection.createEl('div', {
             cls: 'permission-approval-message',
-            text: t('permission.message')
+            text: t('permission.message', { backend: backendName })
         });
 
         const approvalButtons = permissionApprovalSection.createEl('div', {
@@ -511,5 +524,37 @@ export class UIBuilder {
         });
 
         return historyList;
+    }
+
+    /**
+     * Build the sessions section
+     */
+    static buildSessionsSection(
+        container: HTMLElement,
+        onNewSession: () => void,
+        onSessionClick: (sessionDir: string) => void,
+        onSessionDelete: (sessionDir: string) => void,
+        onNoteClick: (notePath: string) => void
+    ): HTMLDivElement {
+        const sessionsSection = container.createEl('div', { cls: 'claude-code-sessions-section' });
+        sessionsSection.id = 'claude-code-sessions-section';
+
+        // Header with title and new session button
+        const sessionsHeader = sessionsSection.createEl('div', { cls: 'claude-code-sessions-header' });
+        sessionsHeader.createEl('h4', { text: t('sessions.title') });
+
+        const newSessionBtn = sessionsHeader.createEl('button', {
+            cls: 'claude-code-new-session-btn',
+            text: '+ ' + t('sessions.newSession')
+        });
+        newSessionBtn.addEventListener('click', onNewSession);
+
+        // Sessions list container
+        sessionsSection.createEl('div', {
+            cls: 'claude-code-sessions-list',
+            attr: { id: 'claude-code-sessions-list' }
+        });
+
+        return sessionsSection;
     }
 }

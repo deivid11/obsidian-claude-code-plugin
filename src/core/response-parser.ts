@@ -21,6 +21,15 @@ interface StreamEvent {
         input_tokens?: number;
         output_tokens?: number;
     };
+    // OpenCode event fields
+    part?: {
+        text?: string;
+        tokens?: {
+            input?: number;
+            output?: number;
+        };
+    };
+    sessionID?: string;
 }
 
 /**
@@ -49,7 +58,7 @@ export class ResponseParser {
             try {
                 const event = JSON.parse(line) as StreamEvent;
 
-                // Collect text from streaming events (real-time deltas)
+                // Claude CLI: Collect text from streaming events (real-time deltas)
                 if (event.type === 'stream_event') {
                     if (event.event_type === 'content_block_delta') {
                         if (event.delta?.type === 'text_delta' && event.delta.text) {
@@ -58,7 +67,7 @@ export class ResponseParser {
                     }
                 }
 
-                // Also collect from complete assistant messages (fallback)
+                // Claude CLI: Also collect from complete assistant messages (fallback)
                 if (event.type === 'assistant') {
                     if (event.message?.content) {
                         for (const block of event.message.content) {
@@ -69,7 +78,7 @@ export class ResponseParser {
                     }
                 }
 
-                // Get token usage from result event
+                // Claude CLI: Get token usage from result event
                 if (event.type === 'result') {
                     if (event.usage) {
                         tokenUsage = {
@@ -78,6 +87,21 @@ export class ResponseParser {
                             totalTokens: (event.usage.input_tokens || 0) + (event.usage.output_tokens || 0)
                         };
                     }
+                }
+
+                // OpenCode: Collect text from text events
+                if (event.type === 'text' && event.part?.text) {
+                    assistantText += event.part.text;
+                }
+
+                // OpenCode: Get token usage from step_finish event
+                if (event.type === 'step_finish' && event.part?.tokens) {
+                    const tokens = event.part.tokens;
+                    tokenUsage = {
+                        inputTokens: tokens.input || 0,
+                        outputTokens: tokens.output || 0,
+                        totalTokens: (tokens.input || 0) + (tokens.output || 0)
+                    };
                 }
             } catch {
                 // Skip invalid JSON lines

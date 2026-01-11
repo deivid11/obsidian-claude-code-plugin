@@ -1,6 +1,6 @@
 # Claude Code Plugin for Obsidian - AI Writing & Editing Assistant
 
-An Obsidian plugin that brings Anthropic's Claude Code AI directly into your vault. Edit notes intelligently, analyze content, generate text, create diagrams, and automate repetitive tasks - all from within Obsidian. Supports Claude Sonnet, Opus, and Haiku models with full tool capabilities including file operations, web search, and bash commands.
+An Obsidian plugin that brings AI coding assistants directly into your vault. Edit notes intelligently, analyze content, generate text, create diagrams, and automate repetitive tasks - all from within Obsidian. Supports **Claude Code** and **OpenCode** backends with full tool capabilities including file operations, web search, and bash commands.
 
 ![Demo](docs/demo-obsidian-claude-code.png)
 
@@ -10,34 +10,47 @@ An Obsidian plugin that brings Anthropic's Claude Code AI directly into your vau
 ## Features
 
 ### 🤖 AI-Powered Note Editing
-- **Direct Integration**: Run Claude Code commands directly from within Obsidian
-- **Context-Aware**: Claude understands your note content and vault structure
-- **Streaming Responses**: See Claude's thoughts in real-time as it processes your request
-- **File Modifications**: Claude can read, edit, and create files with your permission
+- **Direct Integration**: Run AI assistant commands directly from within Obsidian
+- **Multiple Backends**: Choose between **Claude Code** or **OpenCode** as your AI backend
+- **Context-Aware**: The AI understands your note content and vault structure
+- **Streaming Responses**: See responses in real-time as they're generated
+- **File Modifications**: AI can read, edit, and create files with your permission
 
 ### 📊 Rich UI Experience
-- **Real-Time Streaming**: Watch Claude's response appear as it's generated
-- **Task Tracking**: Visual todo list shows Claude's plan and progress
+- **Tabbed Interface**: Switch between Assistant (note-focused) and Sessions (global) views
+- **Real-Time Streaming**: Watch responses appear as they're generated
+- **Task Tracking**: Visual todo list shows the AI's plan and progress
 - **Preview Changes**: Review modifications before applying them to your notes
+- **Activity Monitoring**: See exactly what tools are being used with timing
+
+### 📁 Session Management
+- **Global Sessions View**: See all sessions across your vault in one place
+- **Per-Note Sessions**: Each note maintains its own conversation history
+- **Live Running Indicators**: See which sessions are currently running with real-time elapsed time
+- **Smart Linking**: Sessions stay linked to notes even when renamed or moved
 - **Session History**: Browse and restore previous interactions
-- **Activity Monitoring**: See exactly what tools Claude is using
+- **One-Click Navigation**: Click any session to open the linked note
 
 ### 🎛️ Flexible Control
+- **Backend Selection**: Choose between Claude Code or OpenCode globally
 - **Permission Modes**:
-  - **Interactive Mode**: Claude asks for permission before making changes
-  - **Permissionless Mode**: Claude operates autonomously for trusted operations
-- **Model Selection**: Choose between different Claude models (Sonnet, Opus, Haiku)
-- **Vault Access**: Optionally allow Claude to read/write files across your entire vault
-- **Custom System Prompts**: Configure Claude's behavior with your own instructions
+  - **Interactive Mode**: AI asks for permission before making changes
+  - **Permissionless Mode**: AI operates autonomously for trusted operations
+- **Model Selection**: Choose between different models (Sonnet, Opus, Haiku for Claude; custom models for OpenCode)
+- **Vault Access**: Optionally allow AI to read/write files across your entire vault
+- **Custom System Prompts**: Configure AI behavior with your own instructions
 
 ### 🔧 Advanced Capabilities
-- **Tool Usage**: Claude can use Bash, file operations, web search, and more
+- **Tool Usage**: AI can use Bash, file operations, web search, and more
 - **Session Resumption**: Continue previous conversations across plugin restarts
 - **Selected Text Editing**: Work on specific sections of your notes
-- **Auto-Apply Changes**: Optionally apply Claude's edits automatically
-- **Markdown Rendering**: Beautiful rendering of Claude's responses
+- **Auto-Apply Changes**: Optionally apply edits automatically
+- **Markdown Rendering**: Beautiful rendering of AI responses
+- **Conversational Mode**: Chat without modifying files
 
 ## Installation
+
+**New to AI tools?** Check out our [Beginner's Guide](docs/BEGINNERS_GUIDE.md) for step-by-step instructions with no technical experience required!
 
 ### From Obsidian Community Plugins (Coming Soon)
 The plugin is currently under Obsidian validation and not yet available in the Community Plugins browser. You can track the approval progress here: [PR #8730](https://github.com/obsidianmd/obsidian-releases/pull/8730).
@@ -58,34 +71,43 @@ Once approved, you will be able to:
 
 ## Prerequisites
 
-Before using this plugin, you must have **Claude Code CLI** installed on your system:
+Before using this plugin, you must have at least one AI CLI backend installed:
 
-### Installing Claude Code CLI
+### Option 1: Claude Code CLI (Recommended)
 
 ```bash
-# Install via npm (recommended)
+# Install via npm
 npm install -g @anthropic-ai/claude-code
 
 # Or download from Anthropic's website
 # Visit: https://www.anthropic.com/claude-code
 ```
 
-### API Key Setup
-
-You need an Anthropic API key to use Claude Code:
+**API Key Setup for Claude Code:**
 
 1. Get your API key from [Anthropic Console](https://console.anthropic.com/)
-2. Set up the API key using one of these methods:
+2. Set up the API key:
 
-**Option 1: Environment Variable (Recommended)**
 ```bash
+# Environment Variable (Recommended)
 export ANTHROPIC_API_KEY='your-api-key-here'
-```
 
-**Option 2: Claude Code Configuration**
-```bash
+# Or via Claude Code Configuration
 claude config set api_key your-api-key-here
 ```
+
+### Option 2: OpenCode CLI
+
+OpenCode is an alternative AI coding assistant that supports multiple providers.
+
+```bash
+# Install OpenCode
+# Visit: https://github.com/opencode-ai/opencode
+```
+
+**Configuration for OpenCode:**
+
+OpenCode supports multiple AI providers. Configure your preferred provider in OpenCode's settings. The model format is `provider/model` (e.g., `openai/gpt-4o`, `anthropic/claude-sonnet`).
 
 ## Configuration
 
@@ -93,29 +115,32 @@ claude config set api_key your-api-key-here
 
 Open Settings → Claude Code Integration to configure:
 
-#### Basic Settings
-- **Claude Code Path**: Path to the Claude Code CLI executable (default: `claude`)
-  - Leave as `claude` if installed globally via npm
-  - Set custom path if installed elsewhere (e.g., `/usr/local/bin/claude`)
+#### Backend Selection
+- **Backend**: Choose between Claude Code or OpenCode
+  - **Claude Code**: Anthropic's official CLI (requires Anthropic API key)
+  - **OpenCode**: Multi-provider AI assistant (supports OpenAI, Anthropic, and more)
 
-#### Model Settings
-- **Default Model**: Choose your preferred Claude model
-  - `sonnet` (default) - Claude Sonnet 4 - Balanced performance and speed
-  - `opus` - Claude Opus 4.5 - Most capable, best for complex tasks
-  - `haiku` - Claude Haiku - Fastest, good for simple tasks
-- **Custom Model**: You can also specify a custom model name (e.g., `claude-sonnet-4-5-20250929`) in the advanced settings
+#### Claude Code Settings
+- **Auto-detect Path**: Automatically find the Claude CLI executable
+- **Claude Code Path**: Manual path to the executable (e.g., `/usr/local/bin/claude`)
+- **Model**: Choose between Sonnet (balanced), Opus (most capable), or Haiku (fastest)
+
+#### OpenCode Settings
+- **Auto-detect Path**: Automatically find the OpenCode executable
+- **OpenCode Path**: Manual path to the executable
+- **Model**: Specify model in `provider/model` format (e.g., `openai/gpt-4o`, `anthropic/claude-sonnet`)
 
 #### Permission Settings
-- **Enable Permissionless Mode**: Allow Claude to operate autonomously
-  - ⚠️ When enabled, Claude can read/write files without asking
+- **Enable Permissionless Mode**: Allow AI to operate autonomously
+  - ⚠️ When enabled, AI can read/write files without asking
   - Useful for trusted operations and automation
-- **Allow Vault Access**: Let Claude access files across your entire vault
-  - When disabled, Claude only works with the current note
+- **Allow Vault Access**: Let AI access files across your entire vault
+  - When disabled, AI only works with the current note
 
 #### Advanced Settings
-- **Auto Accept Changes**: Automatically apply Claude's edits without preview
+- **Auto Accept Changes**: Automatically apply edits without preview
 - **Timeout (seconds)**: Maximum execution time (0 = no limit)
-- **Custom System Prompt**: Add custom instructions for Claude's behavior
+- **Custom System Prompt**: Add custom instructions for AI behavior
 
 ## Usage
 
@@ -175,37 +200,45 @@ Prompt: "Improve the clarity of this explanation and add code examples"
 
 ## Features in Detail
 
+### Tabbed Interface
+The plugin features a tabbed interface with two main views:
+- **Assistant Tab**: Note-focused view with prompt input, results, preview, and history
+- **Sessions Tab**: Global view of all sessions across your vault
+
 ### Session Management
-- Each note has its own Claude Code session
-- Sessions persist across plugin restarts
-- View session history in the History panel
-- Resume previous conversations
+- **Per-Note Sessions**: Each note maintains its own conversation history with the AI
+- **Global Sessions View**: The Sessions tab shows all sessions across your vault
+- **Backend-Specific**: Sessions are tied to the backend used (Claude or OpenCode)
+- **Live Status**: See which sessions are currently running with real-time elapsed time
+- **Smart Linking**: Sessions automatically update when you rename or move notes
+- **One-Click Access**: Click any session to open the linked note and switch to Assistant view
+- **Session Deletion**: Remove old sessions you no longer need
 
 ### Preview System
-- **Raw View**: See the exact markdown Claude will apply
+- **Raw View**: See the exact markdown that will be applied
 - **Rendered View**: Preview how the note will look
 - **Diff View**: Compare original vs modified content line-by-line
 
 ### Todo List Display
-- When Claude uses the TodoWrite tool, see its plan
-- Track progress as Claude completes tasks
+- When the AI uses the TodoWrite tool, see its plan
+- Track progress as tasks are completed
 - Visual indicators for pending, in-progress, and completed items
 
 ### Permission Requests
-- In interactive mode, Claude asks before making changes
-- Review what Claude wants to do
+- In interactive mode, the AI asks before making changes
+- Review what the AI wants to do
 - Approve or deny with one click
 - Re-run with permissionless mode if you trust the operation
 
 ### Output Monitoring
-- All Claude Code CLI output is captured
-- Tool usage is displayed with formatted details
+- All CLI output is captured and displayed
+- Tool usage is displayed with formatted details and timing
 - Errors and warnings are highlighted
 - Expandable logs for debugging
 
 ## Keyboard Shortcuts
 
-- `Enter`: Run Claude Code (when focused in prompt input)
+- `Enter`: Run AI assistant (when focused in prompt input)
 - `Ctrl/Cmd + Enter`: Insert newline in prompt
 - `Esc`: Cancel running operation
 
@@ -340,6 +373,10 @@ npm run dev
 ```
 src/
 ├── core/               # Core logic
+│   ├── backends/                # Backend adapters
+│   │   ├── types.ts             # Common interfaces
+│   │   ├── claude-backend.ts    # Claude Code adapter
+│   │   └── opencode-backend.ts  # OpenCode adapter
 │   ├── claude-code-runner.ts    # Main execution engine
 │   ├── streaming/               # Stream processing
 │   ├── session-manager.ts       # Session handling
@@ -348,6 +385,8 @@ src/
 │   ├── view.ts                  # Main view component
 │   ├── ui-builder.ts            # UI construction
 │   └── renderers/               # Output rendering
+├── i18n/               # Internationalization
+│   └── locales/                 # Language files
 └── main.ts            # Plugin entry point
 ```
 
@@ -367,7 +406,8 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 
 - Built with the [Obsidian API](https://github.com/obsidianmd/obsidian-api)
 - Powered by [Anthropic's Claude](https://www.anthropic.com/claude)
-- Uses [Claude Code CLI](https://github.com/anthropics/claude-code)
+- Supports [Claude Code CLI](https://github.com/anthropics/claude-code)
+- Supports [OpenCode CLI](https://github.com/opencode-ai/opencode)
 
 ## License
 
@@ -375,4 +415,4 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ---
 
-**Note**: This plugin requires Claude Code CLI and an Anthropic API key. Costs are based on your Anthropic API usage.
+**Note**: This plugin requires either Claude Code CLI (with Anthropic API key) or OpenCode CLI installed. Costs depend on your chosen backend and API provider usage.

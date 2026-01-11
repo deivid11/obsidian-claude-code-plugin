@@ -10,10 +10,13 @@ export class OutputStatusManager {
      */
     static extractStatus(line: string): string | null {
         // Check if line contains tool usage information
-        if (line.includes('🔧 Using tool:')) {
-            const toolMatch = line.match(/🔧 Using tool: (\w+)/);
+        if (line.includes('Using tool:')) {
+            const toolMatch = line.match(/Using tool: (\w+)/);
             if (toolMatch) {
-                return `🔧 Using ${toolMatch[1]} tool...`;
+                // Extract the icon that precedes "Using tool:"
+                const iconMatch = line.match(/^[\s\n]*(.+?) Using tool:/);
+                const icon = iconMatch ? iconMatch[1].trim() : '🔧';
+                return `${icon} Using ${toolMatch[1]} tool...`;
             }
         } else if (line.includes('$ ')) {
             // Bash command execution

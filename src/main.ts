@@ -1,7 +1,8 @@
-import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, FileSystemAdapter } from 'obsidian';
 import { ClaudeCodeView } from './ui/view';
 import { VIEW_TYPE_CLAUDE_CODE } from './core/types';
 import { ClaudeCodeSettings, DEFAULT_SETTINGS, ClaudeCodeSettingTab } from './core/settings';
+import { SessionManager } from './core/session-manager';
 import { initI18n } from './i18n';
 
 export default class ClaudeCodePlugin extends Plugin {
@@ -63,6 +64,26 @@ export default class ClaudeCodePlugin extends Plugin {
 
         // Add settings tab
         this.addSettingTab(new ClaudeCodeSettingTab(this.app, this));
+
+        // Listen for file renames to update session paths
+        this.registerEvent(
+            this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+                    if (vaultPath) {
+                        const updated = SessionManager.updateSessionPaths(
+                            vaultPath,
+                            this.app.vault.configDir,
+                            oldPath,
+                            file.path
+                        );
+                        if (updated > 0) {
+                            console.debug(`Updated ${updated} session(s) for renamed file: ${oldPath} -> ${file.path}`);
+                        }
+                    }
+                }
+            })
+        );
     }
 
     onunload() {

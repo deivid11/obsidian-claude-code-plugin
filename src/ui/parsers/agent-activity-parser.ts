@@ -68,10 +68,13 @@ export class AgentActivityParser {
         }
 
         // Tool usage (special case: action comes from match)
-        if (text.includes('🔧 Using tool:')) {
-            const match = text.match(/🔧 Using tool: (\w+)/);
+        if (text.includes('Using tool:')) {
+            const match = text.match(/Using tool: (\w+)/);
             if (match) {
-                return this.createStep('🔧', match[1], 'starting...', `tool-${match[1]}`);
+                // Extract the emoji before "Using tool:" if present
+                const emojiMatch = text.match(/^[\s\n]*(.+?) Using tool:/);
+                const icon = emojiMatch ? emojiMatch[1].trim() : '🔧';
+                return this.createStep(icon, match[1], 'starting...', `tool-${match[1]}`);
             }
         }
 
@@ -214,8 +217,8 @@ export class AgentActivityParser {
             );
         }
 
-        // Final response indicator
-        if (text.includes('✓ Claude Code completed')) {
+        // Final response indicator (works with any backend)
+        if (text.includes('✓ Claude Code completed') || text.includes('✓ OpenCode completed') || text.match(/✓ .+ completed successfully/)) {
             return this.createStep('🎉', 'Finished', 'Successfully', 'finished');
         }
 

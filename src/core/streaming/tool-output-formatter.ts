@@ -58,6 +58,7 @@ export class ToolOutputFormatter {
      */
     private static formatVerboseHeader(toolName: string): string[] {
         const headers: { [key: string]: string } = {
+            // Claude CLI tools (capitalized)
             'Bash': '\n🔧 Bash executing:\n',
             'Glob': '\n🔍 Glob searching:\n',
             'Grep': '\n🔎 Grep searching:\n',
@@ -66,10 +67,42 @@ export class ToolOutputFormatter {
             'Edit': '\n✏️  Editing file:\n',
             'WebFetch': '\n🌐 Fetching webpage:\n',
             'WebSearch': '\n🔍 Web searching:\n',
-            'Task': '\n🤖 Launching agent:\n'
+            'Task': '\n🤖 Launching agent:\n',
+            // OpenCode tools (lowercase)
+            'bash': '\n💻 Bash:\n',
+            'read': '\n📖 Read:\n',
+            'write': '\n✍️  Write:\n',
+            'edit': '\n✏️  Edit:\n',
+            'glob': '\n🔍 Glob:\n',
+            'grep': '\n🔎 Grep:\n',
+            'websearch': '\n🌐 Web Search:\n',
+            'webfetch': '\n🌍 Web Fetch:\n',
+            'todoread': '\n📋 Todo Read:\n',
+            'todowrite': '\n📝 Todo Write:\n',
+            'list': '\n📁 List:\n',
+            'patch': '\n🩹 Patch:\n',
+            'think': '\n🧠 Thinking:\n',
         };
 
         return [headers[toolName] || `\n🛠️  ${toolName}:\n`];
+    }
+
+    /**
+     * Get icon for a tool name (for inline display)
+     */
+    static getToolIcon(toolName: string): string {
+        const icons: { [key: string]: string } = {
+            // Claude CLI tools
+            'Bash': '💻', 'Glob': '🔍', 'Grep': '🔎', 'Read': '📖',
+            'Write': '✍️', 'Edit': '✏️', 'WebFetch': '🌐', 'WebSearch': '🔍',
+            'Task': '🤖', 'TodoWrite': '📝',
+            // OpenCode tools
+            'bash': '💻', 'read': '📖', 'write': '✍️', 'edit': '✏️',
+            'glob': '🔍', 'grep': '🔎', 'websearch': '🌐', 'webfetch': '🌍',
+            'todoread': '📋', 'todowrite': '📝', 'list': '📁', 'patch': '🩹',
+            'think': '🧠',
+        };
+        return icons[toolName] || '🔧';
     }
 
     /**

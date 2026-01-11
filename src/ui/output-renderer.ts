@@ -2,7 +2,7 @@
  * Output Renderer - Handles rendering of output and markdown content
  */
 
-import { MarkdownRenderer, Component, App } from 'obsidian';
+import { MarkdownRenderer, Component, App, FileSystemAdapter, TFile } from 'obsidian';
 import { AgentStep } from '../core/types';
 import { AgentActivityParser } from './parsers/agent-activity-parser';
 
@@ -13,6 +13,7 @@ export class OutputRenderer {
     private app: App;
     private notePath: string;
     private currentStreamingElement: HTMLDivElement | null = null;
+    private vaultPath: string;
 
     constructor(outputArea: HTMLDivElement, component: Component, app: App, notePath: string, outputSection?: HTMLDivElement) {
         this.outputArea = outputArea;
@@ -21,6 +22,7 @@ export class OutputRenderer {
         this.notePath = notePath;
         this.currentStreamingElement = null;
         this.outputSection = outputSection || null;
+        this.vaultPath = (app.vault.adapter as FileSystemAdapter).getBasePath() || '';
     }
 
     /**
@@ -48,11 +50,77 @@ export class OutputRenderer {
                 line.textContent = text;
             }
         } else {
-            line.textContent = text;
+            // Check for file paths and make them clickable
+            this.renderTextWithLinks(line, text);
         }
 
         // Auto-scroll to bottom
         this.outputArea.scrollTop = this.outputArea.scrollHeight;
+    }
+
+    /**
+     * Render text with clickable file links
+     */
+    private renderTextWithLinks(container: HTMLElement, text: string): void {
+        // Pattern to match file paths (absolute paths ending in .md)
+        // Matches paths like /home/user/vault/note.md or C:\Users\vault\note.md
+        // Use space ' ' to allow spaces in filenames but not newlines
+        const filePathPattern = /([\\/][\w\-./ \\]+\.md)/gi;
+
+        let lastIndex = 0;
+        let match;
+
+        while ((match = filePathPattern.exec(text)) !== null) {
+            // Add text before the match
+            if (match.index > lastIndex) {
+                container.appendText(text.substring(lastIndex, match.index));
+            }
+
+            const fullPath = match[1];
+
+            // Check if this path is inside the vault
+            if (this.vaultPath && fullPath.startsWith(this.vaultPath)) {
+                // Convert to relative path
+                const relativePath = fullPath.substring(this.vaultPath.length + 1); // +1 for the separator
+
+                // Create clickable link
+                const link = container.createEl('a', {
+                    cls: 'claude-code-file-link',
+                    text: fullPath
+                });
+                link.setAttribute('href', '#');
+                link.setAttribute('title', `Open ${relativePath}`);
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    void this.openFile(relativePath);
+                });
+            } else {
+                // Path not in vault, just show as text
+                container.appendText(fullPath);
+            }
+
+            lastIndex = match.index + match[0].length;
+        }
+
+        // Add remaining text
+        if (lastIndex < text.length) {
+            container.appendText(text.substring(lastIndex));
+        }
+
+        // If no matches were found, just set the text
+        if (lastIndex === 0) {
+            container.textContent = text;
+        }
+    }
+
+    /**
+     * Open a file in Obsidian
+     */
+    private async openFile(relativePath: string): Promise<void> {
+        const file = this.app.vault.getAbstractFileByPath(relativePath);
+        if (file instanceof TFile) {
+            await this.app.workspace.getLeaf(false).openFile(file);
+        }
     }
 
     /**

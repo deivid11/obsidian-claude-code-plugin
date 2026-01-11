@@ -39,12 +39,33 @@
     margin-bottom: 8px;
 }
 
+.claude-code-header-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .claude-code-header-title h4 {
     margin: 0;
     padding: 0;
     font-size: 18px;
     font-weight: 600;
     color: var(--text-normal);
+}
+
+.claude-code-settings-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 16px;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    line-height: 1;
+}
+
+.claude-code-settings-button:hover {
+    opacity: 1;
 }
 
 .claude-code-current-note {
@@ -788,6 +809,19 @@
     line-height: 1.5;
     padding: 3px 0;
     font-family: var(--font-text);
+}
+
+/* Clickable file links in output */
+.claude-code-file-link {
+    color: var(--link-color);
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.claude-code-file-link:hover {
+    color: var(--link-color-hover);
+    text-decoration: underline;
 }
 
 /* Streaming text with fade-in animation */
@@ -1550,4 +1584,324 @@
 .claude-code-preview-section.collapsed,
 .claude-code-agent-container.collapsed {
     min-height: 0;
+}
+
+/* Sessions Section */
+.claude-code-sessions-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.claude-code-sessions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-normal);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.claude-code-sessions-section.collapsed .claude-code-sessions-header {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.claude-code-sessions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.claude-code-sessions-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 16px;
+}
+
+.claude-code-session-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.claude-code-session-item:hover {
+    background-color: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border-hover);
+}
+
+.claude-code-session-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.claude-code-session-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.claude-code-session-title:hover {
+    color: var(--text-accent);
+}
+
+.claude-code-session-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.claude-code-session-backend {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.claude-code-backend-claude {
+    background-color: rgba(139, 92, 246, 0.15);
+    color: rgb(139, 92, 246);
+}
+
+.claude-code-backend-opencode {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: rgb(34, 197, 94);
+}
+
+.claude-code-session-time {
+    color: var(--text-muted);
+}
+
+.claude-code-session-messages {
+    color: var(--text-faint);
+}
+
+.claude-code-session-delete {
+    padding: 4px 8px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    opacity: 0.5;
+    transition: opacity 0.15s ease;
+}
+
+.claude-code-session-delete:hover {
+    opacity: 1;
+}
+
+/* Tab Navigation */
+.claude-code-tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--background-modifier-border);
+    margin-bottom: 16px;
+}
+
+.claude-code-tab {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.claude-code-tab:hover {
+    color: var(--text-normal);
+    background-color: var(--background-modifier-hover);
+}
+
+.claude-code-tab.active {
+    color: var(--interactive-accent);
+    border-bottom-color: var(--interactive-accent);
+    font-weight: 600;
+}
+
+.claude-code-tab-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.claude-code-tab-pane {
+    display: none;
+    flex-direction: column;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.claude-code-tab-pane.active {
+    display: flex;
+}
+
+/* Sessions tab styling adjustments */
+.claude-code-sessions-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: transparent;
+    border: none;
+    padding: 0;
+}
+
+.claude-code-sessions-header h4 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.claude-code-sessions-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    max-height: none;
+}
+
+/* Session running state */
+.claude-code-session-item.is-running {
+    border-color: var(--interactive-accent);
+    background-color: rgba(139, 92, 246, 0.05);
+}
+
+/* Running badge with timer */
+.claude-code-session-running-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    background-color: rgba(34, 197, 94, 0.15);
+    color: rgb(34, 197, 94);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.claude-code-session-timer {
+    font-variant-numeric: tabular-nums;
+}
+
+/* CSS Spinner */
+.claude-code-spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid rgba(34, 197, 94, 0.3);
+    border-top-color: rgb(34, 197, 94);
+    border-radius: 50%;
+    animation: claude-spinner 0.8s linear infinite;
+}
+
+@keyframes claude-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* New Session Button */
+.claude-code-new-session-btn {
+    padding: 6px 12px;
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: opacity 0.15s ease;
+}
+
+.claude-code-new-session-btn:hover {
+    opacity: 0.9;
+}
+
+/* Session header layout */
+.claude-code-sessions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Standalone session styling */
+.claude-code-session-item.is-standalone {
+    border-style: dashed;
+}
+
+.claude-code-session-standalone-icon {
+    opacity: 0.7;
+}
+
+.claude-code-session-standalone-badge {
+    padding: 2px 6px;
+    background-color: rgba(156, 163, 175, 0.2);
+    color: var(--text-muted);
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+/* Linked notes */
+.claude-code-session-notes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.claude-code-session-note-link {
+    padding: 2px 6px;
+    background-color: var(--background-modifier-border);
+    color: var(--text-muted);
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.claude-code-session-note-link:hover {
+    background-color: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.claude-code-session-note-more {
+    padding: 2px 6px;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-style: italic;
 }

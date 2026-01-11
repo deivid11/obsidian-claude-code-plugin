@@ -3,8 +3,9 @@
  */
 export const en = {
     // Header
-    'header.title': 'Claude Code assistant',
+    'header.title': '{backend} assistant',
     'header.noNoteSelected': 'No note selected',
+    'header.settings': 'Open settings',
 
     // Input Section
     'input.label': 'Your instructions:',
@@ -15,7 +16,7 @@ export const en = {
     'input.autoAccept': 'Auto-accept changes',
     'input.modelLabel': 'Model:',
     'input.modelDefault': 'Default',
-    'input.runButton': 'Run Claude Code',
+    'input.runButton': 'Run {backend}',
     'input.runningButton': 'Running...',
     'input.cancelButton': 'Cancel',
 
@@ -51,19 +52,19 @@ export const en = {
     'todo.completed': 'Completed',
 
     // Interactive Prompt
-    'interactive.header': 'Claude is asking for confirmation',
+    'interactive.header': '{backend} is asking for confirmation',
     'interactive.yesButton': 'Yes',
     'interactive.noButton': 'No',
     'interactive.customPlaceholder': 'Or type a custom response...',
 
     // Permission Approval
     'permission.header': 'Permission required',
-    'permission.message': 'Claude is requesting permission to execute actions.',
+    'permission.message': '{backend} is requesting permission to execute actions.',
     'permission.approveButton': 'Approve & continue',
     'permission.denyButton': 'Deny',
 
     // Status Messages
-    'status.processing': 'Claude is processing',
+    'status.processing': '{backend} is processing',
     'status.autoApplying': 'Auto-applying changes...',
     'status.runningAuthorized': 'Running authorized tasks',
     'status.runningInBackground': 'Running in background...',
@@ -75,20 +76,41 @@ export const en = {
     'notice.noActiveNote': 'No active note found, please open a Markdown note first',
     'notice.noEditor': 'No Markdown editor found, please make sure you have a note open',
     'notice.noVaultPath': 'Could not determine vault path',
-    'notice.completed': 'Claude Code completed',
-    'notice.completedNoChanges': 'Claude Code completed (no file changes)',
+    'notice.completed': '{backend} completed',
+    'notice.completedNoChanges': '{backend} completed (no file changes)',
     'notice.changesApplied': 'Changes applied automatically',
     'notice.changesAppliedSuccess': 'Changes applied successfully',
     'notice.failedApplyChanges': 'Failed to apply changes',
     'notice.changesRejected': 'Changes rejected',
     'notice.cancelled': 'Cancelled',
-    'notice.permissionRequest': 'Claude is requesting permission - please approve or deny',
-    'notice.permissionDenied': 'Permission denied - Claude will not proceed',
+    'notice.permissionRequest': '{backend} is requesting permission - please approve or deny',
+    'notice.permissionDenied': 'Permission denied - {backend} will not proceed',
     'notice.noChangesToApply': 'No changes to apply',
     'notice.noActiveFile': 'No active file',
     'notice.historyRestored': 'History item restored',
     'notice.historyRestoredWithChanges': 'History item restored with proposed changes',
     'notice.historyCleared': 'History cleared',
+
+    // Sessions
+    'sessions.title': 'Sessions',
+    'sessions.empty': 'No sessions yet. Create a new session to get started!',
+    'sessions.newSession': 'New Session',
+    'sessions.standalone': 'Standalone',
+    'sessions.linkedNotes': 'Linked notes',
+    'sessions.noLinkedNotes': 'No linked notes yet',
+    'sessions.backend': 'Backend',
+    'sessions.lastUsed': 'Last used',
+    'sessions.messages': 'messages',
+    'sessions.openNote': 'Open note',
+    'sessions.openSession': 'Open session',
+    'sessions.deleteSession': 'Delete session',
+    'sessions.deleteConfirm': 'Are you sure you want to delete this session?',
+    'sessions.deleted': 'Session deleted',
+    'sessions.created': 'New session created',
+
+    // Tabs
+    'tabs.assistant': 'Assistant',
+    'tabs.sessions': 'Sessions',
 
     // Diff View
     'diff.original': 'Original',
@@ -109,7 +131,7 @@ export const en = {
     // Misc
     'misc.noPendingRequest': 'No pending request found',
     'misc.languageChanged': 'Language changed. Some UI elements will update on reload.',
-    'misc.testFailed': 'Claude Code test failed',
+    'misc.testFailed': '{backend} test failed',
 
     // Settings
     'settings.autoDetectPath': 'Auto-detect Claude Code path',
@@ -153,6 +175,23 @@ export const en = {
     'settings.customSmallModelDesc': 'Custom model name for fast operations (e.g., kimi-for-coding)',
     'settings.language': 'Language',
     'settings.languageDesc': 'Select interface language',
+
+    // Backend settings
+    'settings.backend': 'Backend',
+    'settings.backendDesc': 'Choose which CLI backend to use for AI assistance',
+    'settings.claudeSection': 'Claude Code Settings',
+    'settings.opencodeSection': 'OpenCode Settings',
+    'settings.commonSection': 'Common Settings',
+
+    // OpenCode specific settings
+    'settings.opencodeAutoDetect': 'Auto-detect OpenCode path',
+    'settings.opencodeAutoDetectDesc': 'Automatically detect the OpenCode executable location',
+    'settings.opencodePath': 'OpenCode executable path',
+    'settings.opencodePathDesc': 'Full path to the OpenCode executable (e.g., /usr/local/bin/opencode)',
+    'settings.testOpencode': 'Test OpenCode installation',
+    'settings.testOpencodeDesc': 'Verify that OpenCode is accessible and working',
+    'settings.opencodeModel': 'OpenCode model',
+    'settings.opencodeModelDesc': 'Model to use in provider/model format (e.g., openai/gpt-4o, anthropic/claude-sonnet)',
 };
 
 export type TranslationKey = keyof typeof en;

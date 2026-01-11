@@ -5,11 +5,20 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
 import { t, setLocale, getLocale, getAvailableLocales, Locale } from '../i18n';
+import type { BackendType } from './backends/types';
 
 export interface ClaudeCodeSettings {
+    // Backend selection
+    backend: BackendType;
+    // Claude Code settings
     claudeCodePath: string;
     autoDetectPath: boolean;
     modelAlias: 'sonnet' | 'opus' | 'haiku' | '';
+    // OpenCode settings
+    opencodePath: string;
+    opencodeAutoDetect: boolean;
+    opencodeModel: string;
+    // Common settings
     customSystemPrompt: string;
     preserveCursorPosition: boolean;
     timeoutSeconds: number;
@@ -26,9 +35,17 @@ export interface ClaudeCodeSettings {
 }
 
 export const DEFAULT_SETTINGS: ClaudeCodeSettings = {
+    // Backend selection
+    backend: 'claude',
+    // Claude Code settings
     claudeCodePath: '',
     autoDetectPath: true,
     modelAlias: '',
+    // OpenCode settings
+    opencodePath: '',
+    opencodeAutoDetect: true,
+    opencodeModel: '',
+    // Common settings
     customSystemPrompt: '',
     preserveCursorPosition: true,
     timeoutSeconds: 300,
@@ -78,6 +95,39 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                     });
             });
 
+        // Backend selection
+        new Setting(containerEl)
+            .setName(t('settings.backend'))
+            .setDesc(t('settings.backendDesc'))
+            .addDropdown(dropdown => dropdown
+                .addOption('claude', 'Claude Code')
+                .addOption('opencode', 'OpenCode')
+                .setValue(this.plugin.settings.backend)
+                .onChange(async (value) => {
+                    this.plugin.settings.backend = value as BackendType;
+                    await this.plugin.saveSettings();
+                    // Refresh settings display to show backend-specific options
+                    this.display();
+                }));
+
+        // Backend-specific settings
+        if (this.plugin.settings.backend === 'claude') {
+            this.displayClaudeSettings(containerEl);
+        } else if (this.plugin.settings.backend === 'opencode') {
+            this.displayOpenCodeSettings(containerEl);
+        }
+
+        this.displayCommonSettings(containerEl);
+    }
+
+    /**
+     * Display Claude Code specific settings
+     */
+    private displayClaudeSettings(containerEl: HTMLElement): void {
+        new Setting(containerEl)
+            .setName(t('settings.claudeSection'))
+            .setHeading();
+
         // Auto-detect Claude Code path
         new Setting(containerEl)
             .setName(t('settings.autoDetectPath'))
@@ -123,49 +173,12 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                         } else {
                             button.setButtonText('✗ ' + t('settings.testFailed'));
                             setTimeout(() => { button.setButtonText(t('settings.testButton')); }, 2000);
-                            new Notice(`${t('misc.testFailed')}: ${result.error}`);
+                            new Notice(`${t('misc.testFailed', { backend: 'Claude Code' })}: ${result.error}`);
                         }
                     });
                 }));
 
-        // Custom system prompt
-        new Setting(containerEl)
-            .setName(t('settings.customPrompt'))
-            .setDesc(t('settings.customPromptDesc'))
-            .addTextArea(text => {
-                text.setPlaceholder(t('settings.customPromptPlaceholder'))
-                    .setValue(this.plugin.settings.customSystemPrompt)
-                    .onChange(async (value) => {
-                        this.plugin.settings.customSystemPrompt = value;
-                        await this.plugin.saveSettings();
-                    });
-                text.inputEl.rows = 4;
-                text.inputEl.cols = 50;
-            });
-
-        // Preserve cursor position
-        new Setting(containerEl)
-            .setName(t('settings.preserveCursor'))
-            .setDesc(t('settings.preserveCursorDesc'))
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.preserveCursorPosition)
-                .onChange(async (value) => {
-                    this.plugin.settings.preserveCursorPosition = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        // Auto-accept changes
-        new Setting(containerEl)
-            .setName(t('settings.autoAcceptChanges'))
-            .setDesc(t('settings.autoAcceptChangesDesc'))
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.autoAcceptChanges)
-                .onChange(async (value) => {
-                    this.plugin.settings.autoAcceptChanges = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        // Model Alias
+        // Model Alias (Claude-specific)
         new Setting(containerEl)
             .setName(t('settings.model'))
             .setDesc(t('settings.modelDesc'))
@@ -180,7 +193,7 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Allow Vault Access
+        // Allow Vault Access (Claude-specific)
         new Setting(containerEl)
             .setName(t('settings.vaultAccess'))
             .setDesc(t('settings.vaultAccessDesc'))
@@ -191,7 +204,7 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Enable Permissionless Mode
+        // Enable Permissionless Mode (Claude-specific)
         new Setting(containerEl)
             .setName(t('settings.permissionlessMode'))
             .setDesc(t('settings.permissionlessModeDesc'))
@@ -202,22 +215,7 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        // Timeout
-        new Setting(containerEl)
-            .setName(t('settings.timeout'))
-            .setDesc(t('settings.timeoutDesc'))
-            .addText(text => text
-                .setPlaceholder('300')
-                .setValue(String(this.plugin.settings.timeoutSeconds))
-                .onChange(async (value) => {
-                    const num = parseInt(value);
-                    if (!isNaN(num) && num >= 0) {
-                        this.plugin.settings.timeoutSeconds = num;
-                        await this.plugin.saveSettings();
-                    }
-                }));
-
-        // Custom API Configuration Section
+        // Custom API Configuration Section (Claude-specific)
         new Setting(containerEl)
             .setName(t('settings.customApiConfig'))
             .setDesc(t('settings.customApiConfigDesc'))
@@ -271,6 +269,139 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.anthropicSmallFastModel = value.trim();
                     await this.plugin.saveSettings();
+                }));
+    }
+
+    /**
+     * Display OpenCode specific settings
+     */
+    private displayOpenCodeSettings(containerEl: HTMLElement): void {
+        new Setting(containerEl)
+            .setName(t('settings.opencodeSection'))
+            .setHeading();
+
+        // Auto-detect OpenCode path
+        new Setting(containerEl)
+            .setName(t('settings.opencodeAutoDetect'))
+            .setDesc(t('settings.opencodeAutoDetectDesc'))
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.opencodeAutoDetect)
+                .onChange(async (value) => {
+                    this.plugin.settings.opencodeAutoDetect = value;
+                    if (value) {
+                        const detectedPath = this.detectOpenCodePath();
+                        if (detectedPath) {
+                            this.plugin.settings.opencodePath = detectedPath;
+                        }
+                    }
+                    await this.plugin.saveSettings();
+                    this.display();
+                }));
+
+        // OpenCode executable path
+        new Setting(containerEl)
+            .setName(t('settings.opencodePath'))
+            .setDesc(t('settings.opencodePathDesc'))
+            .addText(text => text
+                .setPlaceholder('/usr/local/bin/opencode')
+                .setValue(this.plugin.settings.opencodePath)
+                .setDisabled(this.plugin.settings.opencodeAutoDetect)
+                .onChange(async (value) => {
+                    this.plugin.settings.opencodePath = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Test OpenCode button
+        new Setting(containerEl)
+            .setName(t('settings.testOpencode'))
+            .setDesc(t('settings.testOpencodeDesc'))
+            .addButton(button => button
+                .setButtonText(t('settings.testButton'))
+                .onClick(() => {
+                    void this.testOpenCode().then(result => {
+                        if (result.success) {
+                            button.setButtonText('✓ ' + t('settings.testWorking'));
+                            setTimeout(() => { button.setButtonText(t('settings.testButton')); }, 2000);
+                        } else {
+                            button.setButtonText('✗ ' + t('settings.testFailed'));
+                            setTimeout(() => { button.setButtonText(t('settings.testButton')); }, 2000);
+                            new Notice(`${t('misc.testFailed', { backend: 'OpenCode' })}: ${result.error}`);
+                        }
+                    });
+                }));
+
+        // OpenCode model (provider/model format)
+        new Setting(containerEl)
+            .setName(t('settings.opencodeModel'))
+            .setDesc(t('settings.opencodeModelDesc'))
+            .addText(text => text
+                // eslint-disable-next-line obsidianmd/ui/sentence-case
+                .setPlaceholder('openai/gpt-4o, anthropic/claude-sonnet')
+                .setValue(this.plugin.settings.opencodeModel)
+                .onChange(async (value) => {
+                    this.plugin.settings.opencodeModel = value.trim();
+                    await this.plugin.saveSettings();
+                }));
+    }
+
+    /**
+     * Display common settings shared by all backends
+     */
+    private displayCommonSettings(containerEl: HTMLElement): void {
+        new Setting(containerEl)
+            .setName(t('settings.commonSection'))
+            .setHeading();
+
+        // Custom system prompt
+        new Setting(containerEl)
+            .setName(t('settings.customPrompt'))
+            .setDesc(t('settings.customPromptDesc'))
+            .addTextArea(text => {
+                text.setPlaceholder(t('settings.customPromptPlaceholder'))
+                    .setValue(this.plugin.settings.customSystemPrompt)
+                    .onChange(async (value) => {
+                        this.plugin.settings.customSystemPrompt = value;
+                        await this.plugin.saveSettings();
+                    });
+                text.inputEl.rows = 4;
+                text.inputEl.cols = 50;
+            });
+
+        // Preserve cursor position
+        new Setting(containerEl)
+            .setName(t('settings.preserveCursor'))
+            .setDesc(t('settings.preserveCursorDesc'))
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.preserveCursorPosition)
+                .onChange(async (value) => {
+                    this.plugin.settings.preserveCursorPosition = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Auto-accept changes
+        new Setting(containerEl)
+            .setName(t('settings.autoAcceptChanges'))
+            .setDesc(t('settings.autoAcceptChangesDesc'))
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.autoAcceptChanges)
+                .onChange(async (value) => {
+                    this.plugin.settings.autoAcceptChanges = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        // Timeout
+        new Setting(containerEl)
+            .setName(t('settings.timeout'))
+            .setDesc(t('settings.timeoutDesc'))
+            .addText(text => text
+                .setPlaceholder('300')
+                .setValue(String(this.plugin.settings.timeoutSeconds))
+                .onChange(async (value) => {
+                    const num = parseInt(value);
+                    if (!isNaN(num) && num >= 0) {
+                        this.plugin.settings.timeoutSeconds = num;
+                        await this.plugin.saveSettings();
+                    }
                 }));
     }
 
@@ -356,6 +487,115 @@ export class ClaudeCodeSettingTab extends PluginSettingTab {
                     '/usr/local/bin',
                     '/usr/bin',
                     '/bin',
+                ];
+            }
+
+            const existingPaths = pathsToAdd.filter(p => {
+                try {
+                    return fs.existsSync(p);
+                } catch {
+                    return false;
+                }
+            });
+
+            const enhancedPath = [...new Set([...existingPaths, ...envPath.split(pathSeparator)])].join(pathSeparator);
+
+            return new Promise((resolve) => {
+                exec(`${cmdPath} --version`, {
+                    timeout: 5000,
+                    env: {
+                        ...process.env,
+                        PATH: enhancedPath
+                    }
+                }, (error: Error | null, stdout: string, stderr: string) => {
+                    if (error) {
+                        resolve({ success: false, error: error.message });
+                    } else {
+                        resolve({ success: true });
+                    }
+                });
+            });
+        } catch (e) {
+            return { success: false, error: String(e) };
+        }
+    }
+
+    /**
+     * Attempt to detect OpenCode installation path (cross-platform)
+     */
+    private detectOpenCodePath(): string | null {
+        const isWindows = process.platform === 'win32';
+        const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+
+        let possiblePaths: string[] = [];
+
+        if (isWindows) {
+            possiblePaths = [
+                'opencode', // If in PATH
+                path.join(homeDir, 'AppData', 'Roaming', 'npm', 'opencode.cmd'),
+                path.join(homeDir, '.bun', 'bin', 'opencode.exe'),
+                path.join(homeDir, '.opencode', 'bin', 'opencode.exe'),
+            ];
+        } else {
+            possiblePaths = [
+                'opencode', // If in PATH
+                path.join(homeDir, '.local', 'bin', 'opencode'),
+                path.join(homeDir, '.bun', 'bin', 'opencode'),
+                path.join(homeDir, '.opencode', 'bin', 'opencode'),
+                '/usr/local/bin/opencode',
+                '/usr/bin/opencode',
+            ];
+        }
+
+        for (const cmdPath of possiblePaths) {
+            try {
+                if (!cmdPath.includes('/') && !cmdPath.includes('\\')) {
+                    const whichCmd = isWindows ? 'where' : 'which';
+                    const result = execSync(`${whichCmd} ${cmdPath}`, { encoding: 'utf8' }).trim();
+                    if (result) {
+                        return result.split('\n')[0].trim();
+                    }
+                } else {
+                    if (fs.existsSync(cmdPath)) {
+                        return cmdPath;
+                    }
+                }
+            } catch {
+                // Continue to next path
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Test if OpenCode is accessible and working (cross-platform)
+     */
+    private async testOpenCode(): Promise<{ success: boolean; error?: string }> {
+        try {
+            const cmdPath = this.plugin.settings.opencodePath || 'opencode';
+
+            const isWindows = process.platform === 'win32';
+            const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+            const pathSeparator = isWindows ? ';' : ':';
+
+            const envPath = process.env.PATH || '';
+            let pathsToAdd: string[] = [];
+
+            if (isWindows) {
+                pathsToAdd = [
+                    path.join(homeDir, 'AppData', 'Local', 'Programs', 'nodejs'),
+                    path.join(homeDir, '.bun', 'bin'),
+                    path.join(homeDir, '.opencode', 'bin'),
+                    'C:\\Program Files\\nodejs',
+                ];
+            } else {
+                pathsToAdd = [
+                    path.join(homeDir, '.bun', 'bin'),
+                    path.join(homeDir, '.opencode', 'bin'),
+                    path.join(homeDir, '.local', 'bin'),
+                    '/usr/local/bin',
+                    '/usr/bin',
                 ];
             }
 
