@@ -52,6 +52,17 @@ An Obsidian plugin that brings AI coding assistants directly into your vault. Ed
 
 **New to AI tools?** Check out our [Beginner's Guide](docs/BEGINNERS_GUIDE.md) for step-by-step instructions with no technical experience required!
 
+### Install via BRAT (Recommended)
+
+1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) from the Community Plugins browser.
+2. In Obsidian settings, go to **Community Plugins → BRAT → Add Beta Plugin**.
+3. Paste this repo URL:
+   ```
+   https://github.com/deivid11/obsidian-claude-code-plugin
+   ```
+4. BRAT will download the latest release and keep it auto-updated.
+5. Enable **Claude Code Integration** from the plugin list.
+
 ### From Obsidian Community Plugins (Coming Soon)
 The plugin is currently under Obsidian validation and not yet available in the Community Plugins browser. You can track the approval progress here: [PR #8730](https://github.com/obsidianmd/obsidian-releases/pull/8730).
 
@@ -62,7 +73,7 @@ Once approved, you will be able to:
 4. Click "Install"
 5. Enable the plugin
 
-### Manual Installation (Recommended)
+### Manual Installation
 1. Download the latest release from [GitHub Releases](https://github.com/deivid11/obsidian-claude-code-plugin/releases)
 2. Create a folder: `.obsidian/plugins/claude-code-integration/` in your vault
 3. Extract `main.js`, `manifest.json`, and `styles.css` to that folder
