@@ -91,30 +91,49 @@ install: build ## Build and copy files to Obsidian plugin directory
 
 .PHONY: release
 release: ## Build and upload a new release (auto-increments patch version). Use NOTES="..." for custom release notes
+	@$(MAKE) _do_release BUMP_TYPE=patch
+
+.PHONY: release-minor
+release-minor: ## Build and upload a new minor release (1.0.x -> 1.1.0)
+	@$(MAKE) _do_release BUMP_TYPE=minor
+
+.PHONY: release-major
+release-major: ## Build and upload a new major release (1.x.x -> 2.0.0). Includes CHANGELOG.md in release notes
+	@$(MAKE) _do_release BUMP_TYPE=major
+
+.PHONY: _do_release
+_do_release:
 	@CURRENT_VERSION=$$(grep -oP '"version":\s*"\K[^"]+' manifest.json); \
 	MAJOR=$$(echo $$CURRENT_VERSION | cut -d. -f1); \
 	MINOR=$$(echo $$CURRENT_VERSION | cut -d. -f2); \
 	PATCH=$$(echo $$CURRENT_VERSION | cut -d. -f3); \
-	NEW_PATCH=$$((PATCH + 1)); \
-	NEW_VERSION="$$MAJOR.$$MINOR.$$NEW_PATCH"; \
-	echo "Bumping version: $$CURRENT_VERSION -> $$NEW_VERSION"; \
+	if [ "$(BUMP_TYPE)" = "major" ]; then \
+		NEW_VERSION="$$((MAJOR + 1)).0.0"; \
+	elif [ "$(BUMP_TYPE)" = "minor" ]; then \
+		NEW_VERSION="$$MAJOR.$$((MINOR + 1)).0"; \
+	else \
+		NEW_VERSION="$$MAJOR.$$MINOR.$$((PATCH + 1))"; \
+	fi; \
+	echo "Bumping version: $$CURRENT_VERSION -> $$NEW_VERSION ($(BUMP_TYPE))"; \
 	sed -i "s/\"version\": \"$$CURRENT_VERSION\"/\"version\": \"$$NEW_VERSION\"/" manifest.json; \
 	echo "Building plugin..."; \
 	npm run build; \
 	echo "Creating zip archive..."; \
 	zip -j build/claude-code-integration.zip build/main.js manifest.json build/styles.css; \
 	echo "Committing version bump..."; \
-	git add manifest.json; \
-	git commit -m "$$NEW_VERSION"; \
-	echo "Creating tag $$NEW_VERSION..."; \
-	git tag $$NEW_VERSION; \
+	git add manifest.json CHANGELOG.md; \
+	git commit -m "v$$NEW_VERSION"; \
+	echo "Creating tag v$$NEW_VERSION..."; \
+	git tag "v$$NEW_VERSION"; \
 	echo "Pushing to remote..."; \
 	git push -u origin HEAD && git push origin --tags; \
-	echo "Creating GitHub release $$NEW_VERSION..."; \
+	echo "Creating GitHub release v$$NEW_VERSION..."; \
 	if [ -n "$(NOTES)" ]; then \
-		gh release create $$NEW_VERSION build/main.js manifest.json build/styles.css build/claude-code-integration.zip --title "$$NEW_VERSION" --notes "$(NOTES)"; \
+		gh release create "v$$NEW_VERSION" build/main.js manifest.json build/styles.css build/claude-code-integration.zip --title "v$$NEW_VERSION" --notes "$(NOTES)"; \
+	elif [ -f CHANGELOG.md ]; then \
+		gh release create "v$$NEW_VERSION" build/main.js manifest.json build/styles.css build/claude-code-integration.zip --title "v$$NEW_VERSION" --notes-file CHANGELOG.md; \
 	else \
-		gh release create $$NEW_VERSION build/main.js manifest.json build/styles.css build/claude-code-integration.zip --title "$$NEW_VERSION" --generate-notes; \
+		gh release create "v$$NEW_VERSION" build/main.js manifest.json build/styles.css build/claude-code-integration.zip --title "v$$NEW_VERSION" --generate-notes; \
 	fi || \
-	gh release upload $$NEW_VERSION build/main.js manifest.json build/styles.css build/claude-code-integration.zip --clobber; \
-	echo "Release $$NEW_VERSION uploaded successfully!"
+	gh release upload "v$$NEW_VERSION" build/main.js manifest.json build/styles.css build/claude-code-integration.zip --clobber; \
+	echo "Release v$$NEW_VERSION uploaded successfully!"
