@@ -2,6 +2,21 @@
 
 All notable changes to the Obsidian Claude Code Plugin will be documented in this file.
 
+## Installation
+
+### Install via BRAT
+
+1. Install the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat) from the Community Plugins browser.
+2. In Obsidian settings, go to **Community Plugins → BRAT → Add Beta Plugin**.
+3. Paste this repo URL:
+   ```
+   https://github.com/deivid11/obsidian-claude-code-plugin
+   ```
+4. BRAT will download the latest release and keep it auto-updated.
+5. Enable **Claude Code Integration** from the plugin list.
+
+---
+
 ## [2.0.0] - 2026-01-10
 
 ### Major Features
