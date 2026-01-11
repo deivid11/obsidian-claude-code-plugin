@@ -2,6 +2,8 @@
 
 An Obsidian plugin that brings AI coding assistants directly into your vault. Edit notes intelligently, analyze content, generate text, create diagrams, and automate repetitive tasks - all from within Obsidian. Supports **Claude Code** and **OpenCode** backends with full tool capabilities including file operations, web search, and bash commands.
 
+**Zero external dependencies** - Just install the CLI of your choice and you're ready to go. No Node.js, Python, or additional packages required.
+
 ![Demo](docs/demo-obsidian-claude-code.png)
 
 ![Demo Video](docs/demo-video.gif)
@@ -81,6 +83,7 @@ OpenCode supports multiple AI providers. Configure your preferred provider in Op
 ## Features
 
 ### 🤖 AI-Powered Note Editing
+- **Zero Dependencies**: No Node.js, Python, or extra packages needed - just install the CLI and go
 - **Direct Integration**: Run AI assistant commands directly from within Obsidian
 - **Multiple Backends**: Choose between **Claude Code** or **OpenCode** as your AI backend
 - **Context-Aware**: The AI understands your note content and vault structure
